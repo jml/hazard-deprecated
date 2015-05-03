@@ -3,7 +3,7 @@ mkDerivation {
   pname = "hazard";
   version = "0.1.0.0";
   src = ./.;
-  isLibrary = false;
+  isLibrary = true;
   isExecutable = true;
   buildDepends = [ base scotty ];
   description = "An HTTP API for playing Love Letter";
