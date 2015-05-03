@@ -12,8 +12,14 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
+import Web.Scotty
+
+
 main :: IO ()
-main = putStrLn "Hello world!"
+main = scotty 3000 $ do
+  get "/" $ do
+    html "Hello World!"
