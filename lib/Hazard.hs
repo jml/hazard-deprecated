@@ -12,12 +12,36 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Hazard ( hazardWeb
               ) where
 
+
+import Control.Monad (mzero)
+import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
+import Network.HTTP.Types.Status
 import Web.Scotty
+
+
+type Seconds = Int
+
+data GameCreationRequest = GameCreationRequest {
+  reqNumPlayers :: Int,
+  reqTurnTimeout :: Seconds
+  } deriving (Eq, Show)
+
+
+instance ToJSON GameCreationRequest where
+  toJSON (GameCreationRequest { .. }) = object [ "numPlayers" .= reqNumPlayers
+                                               , "turnTimeout" .= reqTurnTimeout
+                                               ]
+
+instance FromJSON GameCreationRequest where
+  parseJSON (Object v) = GameCreationRequest <$> v .: "numPlayers" <*> v .: "turnTimeout"
+  parseJSON _ = mzero
+
 
 
 hazardWeb :: ScottyM ()
@@ -26,3 +50,8 @@ hazardWeb = do
     html "Hello World!"
   get "/games" $ do
     json ([] :: [Int])
+  post "/games" $ do
+    x <- (jsonData :: ActionM GameCreationRequest)
+    status created201
+    setHeader "Location" "/game/0"
+    raw ""

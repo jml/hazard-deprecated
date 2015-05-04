@@ -31,9 +31,12 @@ spec = with (scottyApp hazardWeb) $ do
   describe "GET /" $ do
     it "responds with 200" $ do
       get "/" `shouldRespondWith` 200
-  describe "GET /games" $ do
-    it "returns empty list when there are no games" $ do
+  describe "/games" $ do
+    it "GET returns empty list when there are no games" $ do
       get "/games" `shouldRespondWith` [json|[]|]
+    it "POST creates game" $ do
+      post "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
+        "" {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
 
 
 suite :: IO TestTree
