@@ -1,5 +1,5 @@
-{ mkDerivation, aeson, base, hspec-wai, hspec-wai-json, http-types
-, scotty, stdenv, tasty, tasty-hspec
+{ mkDerivation, aeson, base, haverer, hspec-wai, hspec-wai-json
+, http-types, scotty, stdenv, tasty, tasty-hspec
 }:
 mkDerivation {
   pname = "hazard";
@@ -7,7 +7,7 @@ mkDerivation {
   src = ./.;
   isLibrary = true;
   isExecutable = true;
-  buildDepends = [ aeson base http-types scotty ];
+  buildDepends = [ aeson base haverer http-types scotty ];
   testDepends = [
     aeson base hspec-wai hspec-wai-json scotty tasty tasty-hspec
   ];

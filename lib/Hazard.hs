@@ -12,6 +12,7 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -20,17 +21,12 @@ module Hazard ( hazardWeb
 
 
 import Control.Monad (mzero)
+
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 import Network.HTTP.Types.Status
 import Web.Scotty
 
-
-type Seconds = Int
-
-data GameCreationRequest = GameCreationRequest {
-  reqNumPlayers :: Int,
-  reqTurnTimeout :: Seconds
-  } deriving (Eq, Show)
+import Hazard.Model (GameCreationRequest(..))
 
 
 instance ToJSON GameCreationRequest where
@@ -51,7 +47,7 @@ hazardWeb = do
   get "/games" $ do
     json ([] :: [Int])
   post "/games" $ do
-    x <- (jsonData :: ActionM GameCreationRequest)
+    _ <- (jsonData :: ActionM GameCreationRequest)
     status created201
     setHeader "Location" "/game/0"
     raw ""

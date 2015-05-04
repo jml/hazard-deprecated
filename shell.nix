@@ -1,7 +1,13 @@
 with (import <nixpkgs> {}).pkgs;
-let pkg = haskellngPackages.callPackage
-            ({ mkDerivation, aeson, base, hspec-wai, hspec-wai-json, http-types
-             , scotty, stdenv, tasty, tasty-hspec
+let modifiedHaskellPackages = haskellngPackages.override {
+      overrides = self: super: {
+        haverer = self.callPackage ../haverer {};
+        hazard = self.callPackage ./. {};
+      };
+    };
+    pkg = modifiedHaskellPackages.callPackage
+            ({ mkDerivation, aeson, base, haverer, hspec-wai, hspec-wai-json
+             , http-types, scotty, stdenv, tasty, tasty-hspec
              }:
              mkDerivation {
                pname = "hazard";
@@ -9,7 +15,7 @@ let pkg = haskellngPackages.callPackage
                src = ./.;
                isLibrary = true;
                isExecutable = true;
-               buildDepends = [ aeson base http-types scotty ];
+               buildDepends = [ aeson base haverer http-types scotty ];
                testDepends = [
                  aeson base hspec-wai hspec-wai-json scotty tasty tasty-hspec
                ];
