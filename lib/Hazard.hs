@@ -12,5 +12,15 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-module Hazard where
+{-# LANGUAGE OverloadedStrings #-}
 
+module Hazard ( hazardWeb
+              ) where
+
+import Web.Scotty
+
+
+hazardWeb :: ScottyM ()
+hazardWeb = do
+  get "/" $ do
+    html "Hello World!"

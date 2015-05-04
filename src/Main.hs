@@ -18,8 +18,8 @@ module Main where
 
 import Web.Scotty
 
+import Hazard (hazardWeb)
+
 
 main :: IO ()
-main = scotty 3000 $ do
-  get "/" $ do
-    html "Hello World!"
+main = scotty 3000 hazardWeb

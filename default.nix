@@ -1,4 +1,5 @@
-{ mkDerivation, base, scotty, stdenv, tasty }:
+{ mkDerivation, base, hspec-wai, scotty, stdenv, tasty, tasty-hspec
+}:
 mkDerivation {
   pname = "hazard";
   version = "0.1.0.0";
@@ -6,7 +7,7 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   buildDepends = [ base scotty ];
-  testDepends = [ base tasty ];
+  testDepends = [ base hspec-wai tasty tasty-hspec ];
   description = "An HTTP API for playing Love Letter";
   license = stdenv.lib.licenses.asl20;
 }

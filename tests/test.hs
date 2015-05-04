@@ -12,14 +12,32 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+{-# LANGUAGE OverloadedStrings #-}
+
+
+import Test.Hspec.Wai
 import Test.Tasty
+import Test.Tasty.Hspec
+
+import Web.Scotty (scottyApp)
+
+import Hazard (hazardWeb)
 
 
-suite :: TestTree
-suite =
-  testGroup "Hazard" [
-  ]
+spec :: Spec
+spec = with (scottyApp hazardWeb) $ do
+  describe "GET /" $ do
+    it "responds with 200" $ do
+      get "/" `shouldRespondWith` 200
+
+
+suite :: IO TestTree
+suite = do
+  spec' <- testSpec "Specification" spec
+  return $ testGroup "Hazard" [spec']
 
 
 main :: IO ()
-main = defaultMain suite
+main = do
+  suite' <- suite
+  defaultMain suite'
