@@ -13,9 +13,11 @@
 -- limitations under the License.
 
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 
 
 import Test.Hspec.Wai
+import Test.Hspec.Wai.JSON
 import Test.Tasty
 import Test.Tasty.Hspec
 
@@ -29,6 +31,9 @@ spec = with (scottyApp hazardWeb) $ do
   describe "GET /" $ do
     it "responds with 200" $ do
       get "/" `shouldRespondWith` 200
+  describe "GET /games" $ do
+    it "returns empty list when there are no games" $ do
+      get "/games" `shouldRespondWith` [json|[]|]
 
 
 suite :: IO TestTree

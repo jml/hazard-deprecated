@@ -24,3 +24,5 @@ hazardWeb :: ScottyM ()
 hazardWeb = do
   get "/" $ do
     html "Hello World!"
+  get "/games" $ do
+    json ([] :: [Int])
