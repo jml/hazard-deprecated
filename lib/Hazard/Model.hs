@@ -15,11 +15,13 @@
 module Hazard.Model ( GameCreationRequest(..)
                     , Seconds
                     , createGame
+                    , numPlayers
                     , reqTurnTimeout
                     , turnTimeout
                     ) where
 
 import qualified Haverer.Game as H
+import Haverer.Player (toPlayers)
 
 
 type Seconds = Int
@@ -41,4 +43,13 @@ data Game a = Pending { _numPlayers :: Int
 
 
 createGame :: a -> GameCreationRequest -> GameSlot a
-createGame userId request = GameSlot { turnTimeout = reqTurnTimeout request }
+createGame userId request = GameSlot { turnTimeout = reqTurnTimeout request
+                                     , gameState = Pending { _numPlayers = reqNumPlayers request }
+                                     }
+
+
+numPlayers :: GameSlot a -> Int
+numPlayers =
+  numPlayers' . gameState
+  where numPlayers' (Pending { _numPlayers = _numPlayers }) = _numPlayers
+        numPlayers' (InProgress { game = game }) = (length . toPlayers . H.players) game
