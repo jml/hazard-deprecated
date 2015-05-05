@@ -21,7 +21,9 @@ import Test.Tasty.QuickCheck
 
 import Hazard.Model (GameCreationRequest(..),
                      createGame,
+                     creator,
                      numPlayers,
+                     players,
                      turnTimeout,
                      reqTurnTimeout)
 
@@ -33,8 +35,12 @@ suite :: TestTree
 suite = testGroup "Hazard.Model" [
   testGroup "QuickCheck tests"
   [ testProperty "createGame has turnTimeout" $
-    \x -> \y -> turnTimeout (createGame (x :: Int) y) == reqTurnTimeout y
+    \x -> \y -> let g = createGame (x :: Int) y in turnTimeout g == reqTurnTimeout y
   , testProperty "createGame has numPlayers" $
-    \x -> \y -> numPlayers (createGame (x :: Int) y) == reqNumPlayers y
+    \x -> \y -> let g = createGame (x :: Int) y in numPlayers g == reqNumPlayers y
+  , testProperty "createGame records creator" $
+    \x -> \y -> let g = createGame (x :: Int) y in creator g == x
+  , testProperty "creator is initial player" $
+    \x -> \y -> let g = createGame (x :: Int) y in players g == [x]
     ]
   ]

@@ -14,9 +14,10 @@
 
 module Hazard.Model ( GameCreationRequest(..)
                     , Seconds
+                    , creator
                     , createGame
                     , numPlayers
-                    , reqTurnTimeout
+                    , players
                     , turnTimeout
                     ) where
 
@@ -44,7 +45,10 @@ data Game a = Pending { _numPlayers :: Int
 
 createGame :: a -> GameCreationRequest -> GameSlot a
 createGame userId request = GameSlot { turnTimeout = reqTurnTimeout request
-                                     , gameState = Pending { _numPlayers = reqNumPlayers request }
+                                     , creator = userId
+                                     , gameState = Pending { _numPlayers = reqNumPlayers request
+                                                           , _players = [userId]
+                                                           }
                                      }
 
 
@@ -53,3 +57,10 @@ numPlayers =
   numPlayers' . gameState
   where numPlayers' (Pending { _numPlayers = _numPlayers }) = _numPlayers
         numPlayers' (InProgress { game = game }) = (length . toPlayers . H.players) game
+
+
+players :: GameSlot a -> [a]
+players =
+  players' . gameState
+  where players' (Pending { _players = _players }) = _players
+        players' (InProgress { game = game }) = (toPlayers . H.players) game
