@@ -20,6 +20,7 @@ import Test.Tasty
 import Test.Tasty.QuickCheck
 
 import Hazard.Model (GameCreationRequest(..),
+                     GameSlot,
                      createGame,
                      creator,
                      numPlayers,
@@ -27,20 +28,33 @@ import Hazard.Model (GameCreationRequest(..),
                      turnTimeout,
                      reqTurnTimeout)
 
+
 instance Arbitrary GameCreationRequest where
   arbitrary = GameCreationRequest <$> arbitrary <*> arbitrary
 
 
+initialGame :: Arbitrary a => Gen (GameSlot a)
+initialGame = createGame <$> arbitrary <*> arbitrary
+
+
+prop_creatorInPlayers :: Eq a => GameSlot a -> Bool
+prop_creatorInPlayers g = creator g `elem` players g
+
+
 suite :: TestTree
 suite = testGroup "Hazard.Model" [
-  testGroup "QuickCheck tests"
-  [ testProperty "createGame has turnTimeout" $
+  testGroup "createGame"
+  [ testProperty "uses requested turnTimeout" $
     \x -> \y -> let g = createGame (x :: Int) y in turnTimeout g == reqTurnTimeout y
-  , testProperty "createGame has numPlayers" $
+  , testProperty "uses requested numPlayers" $
     \x -> \y -> let g = createGame (x :: Int) y in numPlayers g == reqNumPlayers y
-  , testProperty "createGame records creator" $
+  , testProperty "records the creator" $
     \x -> \y -> let g = createGame (x :: Int) y in creator g == x
-  , testProperty "creator is initial player" $
+  , testProperty "leaves creator as the only initial player" $
     \x -> \y -> let g = createGame (x :: Int) y in players g == [x]
-    ]
+  ],
+  testGroup "GameSlot"
+  [ testProperty "creator in players" $ forAll initialGame $
+    \x -> prop_creatorInPlayers (x :: GameSlot Int)
+  ]
   ]

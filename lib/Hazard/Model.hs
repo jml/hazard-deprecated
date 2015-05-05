@@ -13,6 +13,7 @@
 -- limitations under the License.
 
 module Hazard.Model ( GameCreationRequest(..)
+                    , GameSlot
                     , Seconds
                     , creator
                     , createGame
@@ -33,14 +34,18 @@ data GameCreationRequest = GameCreationRequest {
   } deriving (Eq, Show)
 
 
-data GameSlot a = GameSlot { turnTimeout :: Seconds,
-                             creator :: a,
-                             gameState :: Game a }
+data GameSlot a = GameSlot {
+  turnTimeout :: Seconds,
+  creator :: a,
+  gameState :: Game a
+  } deriving (Show)
+
 
 data Game a = Pending { _numPlayers :: Int
                       , _players :: [a]
                       }
             | InProgress { game :: H.Game a }
+            deriving (Show)
 
 
 createGame :: a -> GameCreationRequest -> GameSlot a
