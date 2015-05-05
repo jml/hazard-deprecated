@@ -13,6 +13,8 @@
 -- limitations under the License.
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -26,16 +28,16 @@ import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 import Network.HTTP.Types.Status
 import Web.Scotty
 
-import Hazard.Model (GameCreationRequest(..))
+import Hazard.Model (GameCreationRequest(..), requestGame, Validated(Unchecked))
 
 
-instance ToJSON GameCreationRequest where
-  toJSON (GameCreationRequest { .. }) = object [ "numPlayers" .= reqNumPlayers
-                                               , "turnTimeout" .= reqTurnTimeout
-                                               ]
+instance ToJSON (GameCreationRequest a) where
+  toJSON r = object [ "numPlayers" .= reqNumPlayers r
+                    , "turnTimeout" .= reqTurnTimeout r
+                    ]
 
-instance FromJSON GameCreationRequest where
-  parseJSON (Object v) = GameCreationRequest <$> v .: "numPlayers" <*> v .: "turnTimeout"
+instance FromJSON (GameCreationRequest 'Unchecked) where
+  parseJSON (Object v) = requestGame <$> v .: "numPlayers" <*> v .: "turnTimeout"
   parseJSON _ = mzero
 
 
@@ -47,7 +49,7 @@ hazardWeb = do
   get "/games" $ do
     json ([] :: [Int])
   post "/games" $ do
-    _ <- (jsonData :: ActionM GameCreationRequest)
+    _ <- (jsonData :: ActionM (GameCreationRequest 'Unchecked))
     status created201
     setHeader "Location" "/game/0"
     raw ""

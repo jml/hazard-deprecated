@@ -12,6 +12,8 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module ModelTest (suite) where
@@ -21,16 +23,26 @@ import Test.Tasty.QuickCheck
 
 import Hazard.Model (GameCreationRequest(..),
                      GameSlot,
+                     Validated(..),
                      createGame,
                      creator,
                      numPlayers,
                      players,
+                     requestGame,
                      turnTimeout,
-                     reqTurnTimeout)
+                     validateCreationRequest)
 
 
-instance Arbitrary GameCreationRequest where
-  arbitrary = GameCreationRequest <$> arbitrary <*> arbitrary
+instance Arbitrary (GameCreationRequest 'Unchecked) where
+  arbitrary = requestGame <$> arbitrary <*> arbitrary
+
+
+instance Arbitrary (GameCreationRequest 'Valid) where
+  arbitrary = do
+    uncheckedRequest <- requestGame <$> choose (2, 4) <*> (getPositive <$> arbitrary)
+    case validateCreationRequest uncheckedRequest of
+     Left e -> error $ show e
+     Right r -> return r
 
 
 initialGame :: Arbitrary a => Gen (GameSlot a)
