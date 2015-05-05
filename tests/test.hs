@@ -25,6 +25,8 @@ import Web.Scotty (scottyApp)
 
 import Hazard (hazardWeb)
 
+import qualified ModelTest
+
 
 spec :: Spec
 spec = with (scottyApp hazardWeb) $ do
@@ -42,7 +44,9 @@ spec = with (scottyApp hazardWeb) $ do
 suite :: IO TestTree
 suite = do
   spec' <- testSpec "Specification" spec
-  return $ testGroup "Hazard" [spec']
+  return $ testGroup "Hazard" [ spec'
+                              , ModelTest.suite
+                              ]
 
 
 main :: IO ()

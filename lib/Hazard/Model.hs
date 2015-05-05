@@ -14,6 +14,9 @@
 
 module Hazard.Model ( GameCreationRequest(..)
                     , Seconds
+                    , createGame
+                    , reqTurnTimeout
+                    , turnTimeout
                     ) where
 
 import qualified Haverer.Game as H
@@ -27,7 +30,15 @@ data GameCreationRequest = GameCreationRequest {
   } deriving (Eq, Show)
 
 
+data GameSlot a = GameSlot { turnTimeout :: Seconds,
+                             creator :: a,
+                             gameState :: Game a }
+
 data Game a = Pending { _numPlayers :: Int
                       , _players :: [a]
                       }
             | InProgress { game :: H.Game a }
+
+
+createGame :: a -> GameCreationRequest -> GameSlot a
+createGame userId request = GameSlot { turnTimeout = reqTurnTimeout request }
