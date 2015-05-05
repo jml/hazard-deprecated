@@ -23,9 +23,11 @@ import Test.Tasty.QuickCheck
 
 import Hazard.Model (GameCreationRequest(..),
                      GameSlot,
+                     Game(Pending, InProgress),
                      Validated(..),
                      createGame,
                      creator,
+                     gameState,
                      numPlayers,
                      players,
                      requestGame,
@@ -53,6 +55,13 @@ prop_creatorInPlayers :: Eq a => GameSlot a -> Bool
 prop_creatorInPlayers g = creator g `elem` players g
 
 
+prop_numPlayersVsActualPlayers :: GameSlot a -> Bool
+prop_numPlayersVsActualPlayers g =
+  case gameState g of
+   Pending {} -> length (players g) < numPlayers g
+   InProgress {} -> length (players g) <= numPlayers g
+
+
 suite :: TestTree
 suite = testGroup "Hazard.Model" [
   testGroup "createGame"
@@ -68,5 +77,7 @@ suite = testGroup "Hazard.Model" [
   testGroup "GameSlot"
   [ testProperty "creator in players" $ forAll initialGame $
     \x -> prop_creatorInPlayers (x :: GameSlot Int)
+  , testProperty "numPlayers greater than or equal to number of players" $ forAll initialGame $
+    \x -> prop_numPlayersVsActualPlayers (x :: GameSlot Int)
   ]
   ]

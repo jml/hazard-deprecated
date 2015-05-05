@@ -19,10 +19,12 @@
 module Hazard.Model ( GameCreationError(..)
                     , GameCreationRequest(reqNumPlayers, reqTurnTimeout)
                     , GameSlot
+                    , Game(Pending, InProgress)
                     , Seconds
                     , Validated(..)
                     , creator
                     , createGame
+                    , gameState
                     , numPlayers
                     , players
                     , requestGame
