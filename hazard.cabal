@@ -29,8 +29,11 @@ library
   hs-source-dirs: lib
   build-depends: base >=4.8 && <4.9
                , http-types >= 0.8.5 && < 0.9
-               , aeson
+               , aeson >= 0.8 && < 0.9
+               , stm >= 2.4 && <2.5
                , scotty >= 0.9 && < 0.10
+               , text >= 1.2 && < 1.3
+               , transformers >= 0.4 && < 0.5
                , haverer
   exposed-modules: Hazard
                  , Hazard.Model
@@ -59,5 +62,6 @@ test-suite test
                , hspec-wai >= 0.6 && <0.7
                , hspec-wai-json >= 0.6 && <0.7
                , scotty >= 0.9 && <0.10
-               , aeson
+               , aeson >= 0.8 && < 0.9
+               , stm >= 2.4 && <2.5
                , hazard

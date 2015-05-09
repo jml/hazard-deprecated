@@ -7,7 +7,8 @@ let modifiedHaskellPackages = haskellngPackages.override {
     };
     pkg = modifiedHaskellPackages.callPackage
             ({ mkDerivation, aeson, base, haverer, hspec-wai, hspec-wai-json
-             , http-types, scotty, stdenv, tasty, tasty-hspec
+             , http-types, scotty, stdenv, stm, tasty, tasty-hspec
+             , tasty-quickcheck, text, transformers
              }:
              mkDerivation {
                pname = "hazard";
@@ -15,9 +16,12 @@ let modifiedHaskellPackages = haskellngPackages.override {
                src = ./.;
                isLibrary = true;
                isExecutable = true;
-               buildDepends = [ aeson base haverer http-types scotty ];
+               buildDepends = [
+                 aeson base haverer http-types scotty stm text transformers
+               ];
                testDepends = [
-                 aeson base hspec-wai hspec-wai-json scotty tasty tasty-hspec
+                 aeson base hspec-wai hspec-wai-json scotty stm tasty tasty-hspec
+                 tasty-quickcheck
                ];
                description = "An HTTP API for playing Love Letter";
                license = stdenv.lib.licenses.asl20;

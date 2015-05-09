@@ -17,17 +17,28 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Hazard ( hazardWeb
+module Hazard ( Hazard
+              , hazardWeb
+              , makeHazard
               ) where
 
 
 import Control.Monad (mzero)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.STM (STM, atomically)
+import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 import Network.HTTP.Types.Status
 import Web.Scotty
 
-import Hazard.Model (GameCreationRequest(..), requestGame, Validated(Unchecked))
+import Hazard.Model (
+  createGame,
+  GameCreationRequest(..),
+  GameSlot,
+  requestGame,
+  Validated(Unchecked),
+  validateCreationRequest)
 
 
 instance ToJSON (GameCreationRequest a) where
@@ -40,13 +51,40 @@ instance FromJSON (GameCreationRequest 'Unchecked) where
   parseJSON _ = mzero
 
 
+data Hazard = Hazard (TVar [GameSlot Int])
 
-hazardWeb :: ScottyM ()
-hazardWeb = do
+
+makeHazard :: STM Hazard
+makeHazard = Hazard <$> newTVar []
+
+
+getGame :: Hazard -> Int -> STM (Maybe (GameSlot Int))
+getGame (Hazard allGames) i = do
+  games <- readTVar allGames
+  if 0 <= i && i < length games
+    then return $ Just (games !! i)
+    else return Nothing
+
+
+hazardWeb :: Hazard -> ScottyM ()
+hazardWeb h@(Hazard allGames) = do
   get "/" $ html "Hello World!"
-  get "/games" $ json ([] :: [Int])
+  get "/games" $ do
+    games <- liftIO $ atomically $ readTVar allGames
+    json ["/game/" ++ show i | i <- [0..length games - 1]]
   post "/games" $ do
-    _ <- jsonData :: ActionM (GameCreationRequest 'Unchecked)
-    status created201
-    setHeader "Location" "/game/0"
-    raw ""
+    gameRequest <- jsonData :: ActionM (GameCreationRequest 'Unchecked)
+    case validateCreationRequest gameRequest of
+     Left e -> error $ show e  -- XXX: Should be bad request
+     Right r -> do
+       let newGame = createGame 0 r
+       liftIO $ atomically $ do
+         games <- readTVar allGames
+         writeTVar allGames (games ++ [newGame])
+       status created201
+       setHeader "Location" "/game/0"
+       raw ""
+  get "/game/:id" $ do
+    gameId <- param "id"
+    game <- liftIO $ atomically $ getGame h gameId
+    json game

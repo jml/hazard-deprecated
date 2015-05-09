@@ -1,5 +1,6 @@
 { mkDerivation, aeson, base, haverer, hspec-wai, hspec-wai-json
-, http-types, scotty, stdenv, tasty, tasty-hspec, tasty-quickcheck
+, http-types, scotty, stdenv, stm, tasty, tasty-hspec
+, tasty-quickcheck, text, transformers
 }:
 mkDerivation {
   pname = "hazard";
@@ -7,9 +8,11 @@ mkDerivation {
   src = ./.;
   isLibrary = true;
   isExecutable = true;
-  buildDepends = [ aeson base haverer http-types scotty ];
+  buildDepends = [
+    aeson base haverer http-types scotty stm text transformers
+  ];
   testDepends = [
-    aeson base hspec-wai hspec-wai-json scotty tasty tasty-hspec
+    aeson base hspec-wai hspec-wai-json scotty stm tasty tasty-hspec
     tasty-quickcheck
   ];
   description = "An HTTP API for playing Love Letter";

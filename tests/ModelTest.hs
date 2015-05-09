@@ -28,6 +28,7 @@ import Hazard.Model (GameCreationRequest(..),
                      createGame,
                      creator,
                      gameState,
+                     joinGame,
                      numPlayers,
                      players,
                      requestGame,
@@ -47,8 +48,27 @@ instance Arbitrary (GameCreationRequest 'Valid) where
      Right r -> return r
 
 
+instance (Arbitrary a, Ord a, Show a) => Arbitrary (GameSlot a) where
+
+  arbitrary = do
+    game <- initialGame
+    extraPlayers <- choose (0, numPlayers game - 1)
+    addPlayers extraPlayers game
+
+
 initialGame :: Arbitrary a => Gen (GameSlot a)
 initialGame = createGame <$> arbitrary <*> arbitrary
+
+
+addPlayers :: (Arbitrary a, Ord a, Show a) => Int -> GameSlot a -> Gen (GameSlot a)
+addPlayers n g =
+  iterate (>>= addPlayer) (return g) !! n
+  where
+    addPlayer g' = do
+      p <- arbitrary `suchThat` (`notElem` players g')
+      case joinGame g' p of
+       Left e -> error $ show e
+       Right r -> return r
 
 
 prop_creatorInPlayers :: Eq a => GameSlot a -> Bool
@@ -75,9 +95,9 @@ suite = testGroup "Hazard.Model" [
     \x y -> let g = createGame (x :: Int) y in players g == [x]
   ],
   testGroup "GameSlot"
-  [ testProperty "creator in players" $ forAll initialGame $
+  [ testProperty "creator in players" $
     \x -> prop_creatorInPlayers (x :: GameSlot Int)
-  , testProperty "numPlayers greater than or equal to number of players" $ forAll initialGame $
+  , testProperty "numPlayers greater than or equal to number of players" $
     \x -> prop_numPlayersVsActualPlayers (x :: GameSlot Int)
   ]
   ]

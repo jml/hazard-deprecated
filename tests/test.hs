@@ -15,6 +15,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
+import Control.Monad.STM (atomically)
 
 import Test.Hspec.Wai
 import Test.Hspec.Wai.JSON
@@ -23,13 +24,13 @@ import Test.Tasty.Hspec
 
 import Web.Scotty (scottyApp)
 
-import Hazard (hazardWeb)
+import Hazard (hazardWeb, makeHazard)
 
 import qualified ModelTest
 
 
 spec :: Spec
-spec = with (scottyApp hazardWeb) $ do
+spec = with (atomically makeHazard >>= scottyApp . hazardWeb) $ do
   describe "GET /" $ do
     it "responds with 200" $ do
       get "/" `shouldRespondWith` 200
@@ -39,6 +40,14 @@ spec = with (scottyApp hazardWeb) $ do
     it "POST creates game" $ do
       post "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
         "" {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
+    it "Created game appears in list" $ do
+      post "/games" [json|{numPlayers: 3, turnTimeout: 3600}|]
+      get "/games" `shouldRespondWith` [json|["/game/0"]|]
+    it "Created game has POST data" $ do
+      post "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
+        "" {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
+      get "/game/0" `shouldRespondWith` [json|{numPlayers: 3, turnTimeout: 3600, creator: 0,
+                                              state: "pending", players: [0]}|] {matchStatus = 200}
 
 
 suite :: IO TestTree
