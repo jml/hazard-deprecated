@@ -58,6 +58,9 @@ makeHazard :: STM Hazard
 makeHazard = Hazard <$> newTVar []
 
 
+getGames :: Hazard -> STM [GameSlot Int]
+getGames (Hazard allGames) = readTVar allGames
+
 getGame :: Hazard -> Int -> STM (Maybe (GameSlot Int))
 getGame (Hazard allGames) i = do
   games <- readTVar allGames
@@ -65,12 +68,17 @@ getGame (Hazard allGames) i = do
     then return $ Just (games !! i)
     else return Nothing
 
+addGame :: Hazard -> GameSlot Int -> STM ()
+addGame (Hazard allGames) game = do
+  games <- readTVar allGames
+  writeTVar allGames (games ++ [game])
+
 
 hazardWeb :: Hazard -> ScottyM ()
-hazardWeb h@(Hazard allGames) = do
+hazardWeb hazard = do
   get "/" $ html "Hello World!"
   get "/games" $ do
-    games <- liftIO $ atomically $ readTVar allGames
+    games <- liftIO $ atomically $ getGames hazard
     json ["/game/" ++ show i | i <- [0..length games - 1]]
   post "/games" $ do
     gameRequest <- jsonData :: ActionM (GameCreationRequest 'Unchecked)
@@ -78,13 +86,11 @@ hazardWeb h@(Hazard allGames) = do
      Left e -> error $ show e  -- XXX: Should be bad request
      Right r -> do
        let newGame = createGame 0 r
-       liftIO $ atomically $ do
-         games <- readTVar allGames
-         writeTVar allGames (games ++ [newGame])
+       liftIO $ atomically $ addGame hazard newGame
        status created201
        setHeader "Location" "/game/0"
        raw ""
   get "/game/:id" $ do
     gameId <- param "id"
-    game <- liftIO $ atomically $ getGame h gameId
+    game <- liftIO $ atomically $ getGame hazard gameId
     json game
