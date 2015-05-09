@@ -33,23 +33,35 @@ userSpec :: Spec
 userSpec = with (do hazard <- atomically makeHazard
                     scottyApp $ hazardWeb' hazard (return "password")) $
   describe "/users" $ do
+
     it "GET responds with 200 and an empty list" $
       get "/users" `shouldRespondWith` [json|[]|] {matchStatus = 200}
+
     it "POST of valid new user responds with 201 and password" $
       post "/users" [json|{username: "foo"}|] `shouldRespondWith`
-        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/users/0"]}
+        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/0"]}
+
     it "GET includes created users" $ do
       post "/users" [json|{username: "foo"}|]
       get "/users" `shouldRespondWith` [json|["foo"]|] {matchStatus = 200}
+
     it "POSTs of two new users responds with 201s and passwords" $ do
       post "/users" [json|{username: "foo"}|] `shouldRespondWith`
-        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/users/0"]}
+        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/0"]}
       post "/users" [json|{username: "bar"}|] `shouldRespondWith`
-        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/users/1"]}
+        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/1"]}
+
     it "POST will not create duplicate users" $ do
       post "/users" [json|{username: "foo"}|]
       post "/users" [json|{username: "foo"}|] `shouldRespondWith`
         [json|{message: "username already exists"}|] {matchStatus = 400}
+
+    it "Can GET user after creating" $ do
+      post "/users" [json|{username: "foo"}|]
+      get "/user/0" `shouldRespondWith` [json|{username: "foo"}|] {matchStatus = 200}
+
+    it "Can't GET users who don't exist" $
+      get "/user/0" `shouldRespondWith` [json|{message: "no such user"}|] {matchStatus = 404}
 
 
 spec :: Spec

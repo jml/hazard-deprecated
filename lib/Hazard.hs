@@ -48,6 +48,7 @@ import Hazard.Model (
 import Hazard.Users (
   UserDB,
   addUser,
+  getUserByID,
   makePassword,
   makeUserDB,
   usernames
@@ -92,10 +93,14 @@ addGame hazard game = do
   writeTVar allGames (games' ++ [game])
 
 
-badRequest :: Text -> ActionM ()
-badRequest message = do
-  status badRequest400
+errorMessage :: Status -> Text -> ActionM ()
+errorMessage code message = do
+  status code
   json (object ["message" .= message])
+
+
+badRequest :: Text -> ActionM ()
+badRequest = errorMessage badRequest400
 
 
 userWeb :: UserDB -> IO B.ByteString -> ScottyM ()
@@ -103,6 +108,7 @@ userWeb userDB pwgen = do
   get "/users" $ do
     usernames' <- liftIO $ atomically $ usernames userDB
     json $ map decodeUtf8 usernames'
+
   post "/users" $ do
     userRequest <- jsonData
     password <- liftIO pwgen
@@ -110,13 +116,21 @@ userWeb userDB pwgen = do
     case newID of
      Just newID' -> do
        status created201
-       setHeader "Location" (append "/users/" (pack (show newID')))
+       setHeader "Location" (append "/user/" (pack (show newID')))
        json (object ["password" .= decodeUtf8 password])
      Nothing -> badRequest "username already exists"
+
+  get "/user/:id" $ do
+    userID <- param "id"
+    user <- liftIO $ atomically $ getUserByID userDB userID
+    case user of
+     Just user' -> json user'
+     Nothing -> errorMessage notFound404 "no such user"
 
 
 hazardWeb :: Hazard -> ScottyM ()
 hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword)
+
 
 hazardWeb' :: Hazard -> IO B.ByteString -> ScottyM ()
 hazardWeb' hazard pwgen = do
@@ -138,4 +152,5 @@ hazardWeb' hazard pwgen = do
     gameId <- param "id"
     game <- liftIO $ atomically $ getGame hazard gameId
     json game
+
   userWeb (users hazard) pwgen

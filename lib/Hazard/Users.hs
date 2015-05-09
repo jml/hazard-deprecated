@@ -2,6 +2,7 @@
 
 module Hazard.Users ( UserDB
                     , addUser
+                    , getUserByID
                     , makeUserDB
                     , makePassword
                     , usernames
@@ -13,13 +14,16 @@ import Control.Monad.STM (STM)
 import Control.Monad.Random (Rand, uniform)
 import qualified Data.ByteString.Lazy as B
 import Data.Text.Lazy (Text)
-import Data.Text.Lazy.Encoding (encodeUtf8)
+import Data.Text.Lazy.Encoding (decodeUtf8, encodeUtf8)
 import System.Random (RandomGen)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 
 
 data User = User B.ByteString B.ByteString
+
+instance ToJSON User where
+  toJSON (User u _) = object ["username" .= decodeUtf8 u]
 
 data UserCreationRequest = UserCreationRequest { reqUsername :: Text }
 
@@ -42,6 +46,12 @@ makeUserDB = UserDB <$> newTVar []
 usernames :: UserDB -> STM [B.ByteString]
 usernames = fmap (map username) . readTVar . unUserDB
             where username (User u _) = u
+
+
+getUserByID :: UserDB -> Int -> STM (Maybe User)
+getUserByID userDB i = do
+  allUsers <- readTVar (unUserDB userDB)
+  return $ if 0 <= i && i < length allUsers then Just (allUsers !! i) else Nothing
 
 
 addUser :: UserDB -> UserCreationRequest -> B.ByteString -> STM (Maybe Int)
