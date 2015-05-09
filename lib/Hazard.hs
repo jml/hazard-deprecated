@@ -32,7 +32,7 @@ import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 import qualified Data.ByteString.Lazy as B
-import Data.Text.Lazy (append, pack)
+import Data.Text.Lazy (Text, append, pack)
 import Data.Text.Lazy.Encoding (decodeUtf8)
 import Network.HTTP.Types.Status
 import Web.Scotty
@@ -92,6 +92,12 @@ addGame hazard game = do
   writeTVar allGames (games' ++ [game])
 
 
+badRequest :: Text -> ActionM ()
+badRequest message = do
+  status badRequest400
+  json (object ["message" .= message])
+
+
 userWeb :: UserDB -> IO B.ByteString -> ScottyM ()
 userWeb userDB pwgen = do
   get "/users" $ do
@@ -101,9 +107,12 @@ userWeb userDB pwgen = do
     userRequest <- jsonData
     password <- liftIO pwgen
     newID <- liftIO $ atomically $ addUser userDB userRequest password
-    status created201
-    setHeader "Location" (append "/users/" (pack (show newID)))
-    json (object ["password" .= decodeUtf8 password])
+    case newID of
+     Just newID' -> do
+       status created201
+       setHeader "Location" (append "/users/" (pack (show newID')))
+       json (object ["password" .= decodeUtf8 password])
+     Nothing -> badRequest "username already exists"
 
 
 hazardWeb :: Hazard -> ScottyM ()

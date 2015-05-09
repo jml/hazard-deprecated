@@ -44,15 +44,18 @@ usernames = fmap (map username) . readTVar . unUserDB
             where username (User u _) = u
 
 
-addUser :: UserDB -> UserCreationRequest -> B.ByteString -> STM Int
+addUser :: UserDB -> UserCreationRequest -> B.ByteString -> STM (Maybe Int)
 addUser userDB req password =
   let username = encodeUtf8 (reqUsername req)
       newUser = User username password
       users' = unUserDB userDB
   in do
      allUsers <- readTVar users'
-     writeTVar users' (newUser:allUsers)
-     return $ length allUsers
+     case filter (\(User u _) -> u == username) allUsers of
+      [] -> do
+        writeTVar users' (newUser:allUsers)
+        return $ Just $ length allUsers
+      _ -> return Nothing
 
 
 makePassword :: RandomGen g => Rand g B.ByteString

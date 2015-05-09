@@ -46,6 +46,10 @@ userSpec = with (do hazard <- atomically makeHazard
         [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/users/0"]}
       post "/users" [json|{username: "bar"}|] `shouldRespondWith`
         [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/users/1"]}
+    it "POST will not create duplicate users" $ do
+      post "/users" [json|{username: "foo"}|]
+      post "/users" [json|{username: "foo"}|] `shouldRespondWith`
+        [json|{message: "username already exists"}|] {matchStatus = 400}
 
 
 spec :: Spec
