@@ -24,9 +24,28 @@ import Test.Tasty.Hspec
 
 import Web.Scotty (scottyApp)
 
-import Hazard (hazardWeb, makeHazard)
+import Hazard (hazardWeb, hazardWeb', makeHazard)
 
 import qualified ModelTest
+
+
+userSpec :: Spec
+userSpec = with (do hazard <- atomically makeHazard
+                    scottyApp $ hazardWeb' hazard (return "password")) $
+  describe "/users" $ do
+    it "GET responds with 200 and an empty list" $
+      get "/users" `shouldRespondWith` [json|[]|] {matchStatus = 200}
+    it "POST of valid new user responds with 201 and password" $
+      post "/users" [json|{username: "foo"}|] `shouldRespondWith`
+        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/users/0"]}
+    it "GET includes created users" $ do
+      post "/users" [json|{username: "foo"}|]
+      get "/users" `shouldRespondWith` [json|["foo"]|] {matchStatus = 200}
+    it "POSTs of two new users responds with 201s and passwords" $ do
+      post "/users" [json|{username: "foo"}|] `shouldRespondWith`
+        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/users/0"]}
+      post "/users" [json|{username: "bar"}|] `shouldRespondWith`
+        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/users/1"]}
 
 
 spec :: Spec
@@ -53,7 +72,9 @@ spec = with (atomically makeHazard >>= scottyApp . hazardWeb) $ do
 suite :: IO TestTree
 suite = do
   spec' <- testSpec "Specification" spec
+  userSpec' <- testSpec "User API" userSpec
   return $ testGroup "Hazard" [ spec'
+                              , userSpec'
                               , ModelTest.suite
                               ]
 

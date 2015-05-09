@@ -34,9 +34,13 @@ library
                , scotty >= 0.9 && < 0.10
                , text >= 1.2 && < 1.3
                , transformers >= 0.4 && < 0.5
+               , bytestring >= 0.10 && < 0.11
+               , MonadRandom >= 0.3 && <0.4
+               , random >= 1.1 && <1.2
                , haverer
   exposed-modules: Hazard
                  , Hazard.Model
+                 , Hazard.Users
   default-language:    Haskell2010
   ghc-options: -Wall
 
