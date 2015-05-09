@@ -73,4 +73,6 @@ test-suite test
                , wai-extra >= 3.0 && <3.1
                , bytestring >= 0.10 && < 0.11
                , base64-bytestring >= 1.0 && <1.1
+               , wai >= 3.0 && <3.1
+               , http-types >= 0.8.5 && < 0.9
                , hazard

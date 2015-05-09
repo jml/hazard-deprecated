@@ -20,6 +20,8 @@ import Control.Monad.STM (atomically)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64 as Base64
 
+import Network.HTTP.Types.Header (Header)
+import Network.Wai (Application)
 import Test.Hspec.Wai
 import Test.Hspec.Wai.JSON
 import Test.Tasty
@@ -27,14 +29,30 @@ import Test.Tasty.Hspec
 
 import Web.Scotty (scottyApp)
 
-import Hazard (hazardWeb, hazardWeb', makeHazard)
+import Hazard (hazardWeb', makeHazard)
 
 import qualified ModelTest
 
 
+
+hazardTestApp :: IO Application
+hazardTestApp = do
+  hazard <- atomically makeHazard
+  scottyApp $ hazardWeb' hazard (return "password")
+
+
+getAs username url = request "GET" url [authHeader username "password"] ""
+
+postAs username url body = request "POST" url [authHeader username "password"] body
+
+authHeader :: B.ByteString -> B.ByteString -> Header
+authHeader username password = ("Authorization", B.concat ["Basic ", encodedCredentials])
+  where encodedCredentials = Base64.encode $ B.concat [username, ":", password]
+
+
 userSpec :: Spec
-userSpec = with (do hazard <- atomically makeHazard
-                    scottyApp $ hazardWeb' hazard (return "password")) $
+userSpec = with hazardTestApp $
+
   describe "/users" $ do
 
     it "GET responds with 200 and an empty list" $
@@ -68,23 +86,21 @@ userSpec = with (do hazard <- atomically makeHazard
 
     it "Can GET user after creating" $ do
       post "/users" [json|{username: "foo"}|]
-      request "GET" "/user/0" [authHeader "foo" "password"] "" `shouldRespondWith` [json|{username: "foo"}|] {matchStatus = 200}
+      getAs "foo" "/user/0" `shouldRespondWith` [json|{username: "foo"}|] {matchStatus = 200}
 
     it "Can't GET users who don't exist" $ do
       post "/users" [json|{username: "foo"}|]
-      request "GET" "/user/1" [authHeader "foo" "password"] "" `shouldRespondWith` [json|{message: "no such user"}|] {matchStatus = 404}
+      getAs "foo" "/user/1" `shouldRespondWith` [json|{message: "no such user"}|] {matchStatus = 404}
 
     where requiresAuth = "Basic authentication is required" { matchStatus = 401
                                                             , matchHeaders = [
                                                               "WWW-Authenticate" <:> "Basic realm=\"Hazard API\""
                                                               ]
                                                             }
-          encodeCredentials username password = Base64.encode $ B.concat [username, ":", password]
-          authHeader username password = ("Authorization", B.concat ["Basic ", encodeCredentials username password])
 
 
 spec :: Spec
-spec = with (atomically makeHazard >>= scottyApp . hazardWeb) $ do
+spec = with hazardTestApp $ do
   describe "GET /" $ do
     it "responds with 200" $ do
       get "/" `shouldRespondWith` 200
@@ -92,13 +108,16 @@ spec = with (atomically makeHazard >>= scottyApp . hazardWeb) $ do
     it "GET returns empty list when there are no games" $ do
       get "/games" `shouldRespondWith` [json|[]|]
     it "POST creates game" $ do
-      post "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
+      post "/users" [json|{username: "foo"}|]
+      postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
         "" {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
     it "Created game appears in list" $ do
-      post "/games" [json|{numPlayers: 3, turnTimeout: 3600}|]
+      post "/users" [json|{username: "foo"}|]
+      postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|]
       get "/games" `shouldRespondWith` [json|["/game/0"]|]
     it "Created game has POST data" $ do
-      post "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
+      post "/users" [json|{username: "foo"}|]
+      postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
         "" {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
       get "/game/0" `shouldRespondWith` [json|{numPlayers: 3, turnTimeout: 3600, creator: 0,
                                               state: "pending", players: [0]}|] {matchStatus = 200}

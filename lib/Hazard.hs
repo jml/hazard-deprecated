@@ -135,7 +135,8 @@ userWeb userDB pwgen = do
      Nothing -> errorMessage notFound404 "no such user"
 
   where isProtected req = return $ case (requestMethod req, pathInfo req) of
-          ("GET", "user":_) -> True
+          (_, "user":_) -> True
+          ("POST", "games":_) -> True
           _ -> False
 
 
@@ -160,6 +161,7 @@ hazardWeb' hazard pwgen = do
     case validateCreationRequest gameRequest of
      Left e -> error $ show e  -- XXX: Should be bad request
      Right r -> do
+       -- XXX: Hardcodes 0 as creator, but should instead be the logged-in user.
        let newGame = createGame 0 r
        liftIO $ atomically $ addGame hazard newGame
        status created201
