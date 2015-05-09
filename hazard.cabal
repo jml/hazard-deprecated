@@ -37,6 +37,8 @@ library
                , bytestring >= 0.10 && < 0.11
                , MonadRandom >= 0.3 && <0.4
                , random >= 1.1 && <1.2
+               , wai >= 3.0 && <3.1
+               , wai-extra >= 3.0 && <3.1
                , haverer
   exposed-modules: Hazard
                  , Hazard.Model
@@ -68,4 +70,7 @@ test-suite test
                , scotty >= 0.9 && <0.10
                , aeson >= 0.8 && < 0.9
                , stm >= 2.4 && <2.5
+               , wai-extra >= 3.0 && <3.1
+               , bytestring >= 0.10 && < 0.11
+               , base64-bytestring >= 1.0 && <1.1
                , hazard

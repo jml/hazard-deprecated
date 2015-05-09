@@ -32,9 +32,12 @@ import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 import qualified Data.ByteString.Lazy as B
+import Data.Maybe (isJust)
 import Data.Text.Lazy (Text, append, pack)
 import Data.Text.Lazy.Encoding (decodeUtf8)
 import Network.HTTP.Types.Status
+import Network.Wai (requestMethod, pathInfo)
+import Network.Wai.Middleware.HttpAuth
 import Web.Scotty
 
 import Hazard.Model (
@@ -48,6 +51,7 @@ import Hazard.Model (
 import Hazard.Users (
   UserDB,
   addUser,
+  authenticate,
   getUserByID,
   makePassword,
   makeUserDB,
@@ -105,6 +109,9 @@ badRequest = errorMessage badRequest400
 
 userWeb :: UserDB -> IO B.ByteString -> ScottyM ()
 userWeb userDB pwgen = do
+
+  middleware $ basicAuth (authUserDB userDB) ("Hazard API" { authIsProtected = isProtected })
+
   get "/users" $ do
     usernames' <- liftIO $ atomically $ usernames userDB
     json $ map decodeUtf8 usernames'
@@ -126,6 +133,16 @@ userWeb userDB pwgen = do
     case user of
      Just user' -> json user'
      Nothing -> errorMessage notFound404 "no such user"
+
+  where isProtected req = return $ case (requestMethod req, pathInfo req) of
+          ("GET", "user":_) -> True
+          _ -> False
+
+
+authUserDB :: UserDB -> CheckCreds
+authUserDB userDB username password = do
+  found <- liftIO $ atomically $ authenticate userDB (B.fromChunks [username]) (B.fromChunks [password])
+  return (isJust found)
 
 
 hazardWeb :: Hazard -> ScottyM ()

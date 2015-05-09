@@ -17,6 +17,9 @@
 
 import Control.Monad.STM (atomically)
 
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Base64 as Base64
+
 import Test.Hspec.Wai
 import Test.Hspec.Wai.JSON
 import Test.Tasty
@@ -56,12 +59,28 @@ userSpec = with (do hazard <- atomically makeHazard
       post "/users" [json|{username: "foo"}|] `shouldRespondWith`
         [json|{message: "username already exists"}|] {matchStatus = 400}
 
+    it "If not logged in, cannot GET user" $ do
+      post "/users" [json|{username: "foo"}|]
+      get "/user/0" `shouldRespondWith` requiresAuth
+
+    it "If not logged in, must authenticate even before getting non-existent users" $
+      get "/user/0" `shouldRespondWith` requiresAuth
+
     it "Can GET user after creating" $ do
       post "/users" [json|{username: "foo"}|]
-      get "/user/0" `shouldRespondWith` [json|{username: "foo"}|] {matchStatus = 200}
+      request "GET" "/user/0" [authHeader "foo" "password"] "" `shouldRespondWith` [json|{username: "foo"}|] {matchStatus = 200}
 
-    it "Can't GET users who don't exist" $
-      get "/user/0" `shouldRespondWith` [json|{message: "no such user"}|] {matchStatus = 404}
+    it "Can't GET users who don't exist" $ do
+      post "/users" [json|{username: "foo"}|]
+      request "GET" "/user/1" [authHeader "foo" "password"] "" `shouldRespondWith` [json|{message: "no such user"}|] {matchStatus = 404}
+
+    where requiresAuth = "Basic authentication is required" { matchStatus = 401
+                                                            , matchHeaders = [
+                                                              "WWW-Authenticate" <:> "Basic realm=\"Hazard API\""
+                                                              ]
+                                                            }
+          encodeCredentials username password = Base64.encode $ B.concat [username, ":", password]
+          authHeader username password = ("Authorization", B.concat ["Basic ", encodeCredentials username password])
 
 
 spec :: Spec

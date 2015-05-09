@@ -2,6 +2,7 @@
 
 module Hazard.Users ( UserDB
                     , addUser
+                    , authenticate
                     , getUserByID
                     , makeUserDB
                     , makePassword
@@ -13,6 +14,7 @@ import Control.Monad (mzero, replicateM)
 import Control.Monad.STM (STM)
 import Control.Monad.Random (Rand, uniform)
 import qualified Data.ByteString.Lazy as B
+import Data.Foldable (find)
 import Data.Text.Lazy (Text)
 import Data.Text.Lazy.Encoding (decodeUtf8, encodeUtf8)
 import System.Random (RandomGen)
@@ -20,6 +22,8 @@ import System.Random (RandomGen)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 
 
+-- XXX: Stored as username / password. Password is in the clear, which is
+-- terrible.
 data User = User B.ByteString B.ByteString
 
 instance ToJSON User where
@@ -52,6 +56,23 @@ getUserByID :: UserDB -> Int -> STM (Maybe User)
 getUserByID userDB i = do
   allUsers <- readTVar (unUserDB userDB)
   return $ if 0 <= i && i < length allUsers then Just (allUsers !! i) else Nothing
+
+
+getUserByName :: UserDB -> B.ByteString -> STM (Maybe User)
+getUserByName userDB username = do
+  allUsers <- readTVar (unUserDB userDB)
+  return $ find (\(User u _) -> u == username) allUsers
+
+
+
+authenticate :: UserDB -> B.ByteString -> B.ByteString -> STM (Maybe User)
+authenticate userDB username password = do
+  foundUser <- getUserByName userDB username
+  return $ case foundUser of
+   Nothing -> Nothing
+   Just u@(User _ p)
+     | p == password -> Just u
+     | otherwise -> Nothing
 
 
 addUser :: UserDB -> UserCreationRequest -> B.ByteString -> STM (Maybe Int)
