@@ -54,7 +54,7 @@ data GameCreationRequest (a :: Validated) = GameCreationRequest {
 
 
 requestGame :: Int -> Seconds -> GameCreationRequest 'Unchecked
-requestGame numPlayers' turnTimeout' = GameCreationRequest numPlayers' turnTimeout'
+requestGame = GameCreationRequest
 
 
 validateCreationRequest :: GameCreationRequest 'Unchecked -> Either GameCreationError (GameCreationRequest 'Valid)

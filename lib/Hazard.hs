@@ -15,7 +15,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Hazard ( hazardWeb
@@ -44,12 +43,10 @@ instance FromJSON (GameCreationRequest 'Unchecked) where
 
 hazardWeb :: ScottyM ()
 hazardWeb = do
-  get "/" $ do
-    html "Hello World!"
-  get "/games" $ do
-    json ([] :: [Int])
+  get "/" $ html "Hello World!"
+  get "/games" $ json ([] :: [Int])
   post "/games" $ do
-    _ <- (jsonData :: ActionM (GameCreationRequest 'Unchecked))
+    _ <- jsonData :: ActionM (GameCreationRequest 'Unchecked)
     status created201
     setHeader "Location" "/game/0"
     raw ""

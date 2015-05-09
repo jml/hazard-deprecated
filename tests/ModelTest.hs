@@ -66,13 +66,13 @@ suite :: TestTree
 suite = testGroup "Hazard.Model" [
   testGroup "createGame"
   [ testProperty "uses requested turnTimeout" $
-    \x -> \y -> let g = createGame (x :: Int) y in turnTimeout g == reqTurnTimeout y
+    \x y -> let g = createGame (x :: Int) y in turnTimeout g == reqTurnTimeout y
   , testProperty "uses requested numPlayers" $
-    \x -> \y -> let g = createGame (x :: Int) y in numPlayers g == reqNumPlayers y
+    \x y -> let g = createGame (x :: Int) y in numPlayers g == reqNumPlayers y
   , testProperty "records the creator" $
-    \x -> \y -> let g = createGame (x :: Int) y in creator g == x
+    \x y -> let g = createGame (x :: Int) y in creator g == x
   , testProperty "leaves creator as the only initial player" $
-    \x -> \y -> let g = createGame (x :: Int) y in players g == [x]
+    \x y -> let g = createGame (x :: Int) y in players g == [x]
   ],
   testGroup "GameSlot"
   [ testProperty "creator in players" $ forAll initialGame $
