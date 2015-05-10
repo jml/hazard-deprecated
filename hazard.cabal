@@ -31,13 +31,13 @@ library
                , http-types >= 0.8.5 && < 0.9
                , aeson >= 0.8 && < 0.9
                , stm >= 2.4 && <2.5
-               , scotty >= 0.9 && < 0.10
+               , Spock >= 0.7.9 && <0.8
                , text >= 1.2 && < 1.3
                , transformers >= 0.4 && < 0.5
                , bytestring >= 0.10 && < 0.11
                , MonadRandom >= 0.3 && <0.4
                , random >= 1.1 && <1.2
-               , wai >= 3.0.5 && <3.1
+               , wai >= 3.0 && <3.1
                , wai-extra >= 3.0 && <3.1
                , haverer
   exposed-modules: Hazard
@@ -51,8 +51,9 @@ library
 executable hazard
   main-is:             Main.hs
   build-depends:       base >=4.8 && <4.9
-                     , scotty >= 0.9 && < 0.10
+                     , Spock >= 0.7.9 && <0.8
                      , hazard
+                     , stm >= 2.4 && <2.5
   hs-source-dirs:      src
   default-language:    Haskell2010
 
@@ -68,7 +69,7 @@ test-suite test
                , tasty-quickcheck >= 0.8 && <0.9
                , hspec-wai >= 0.6 && <0.7
                , hspec-wai-json >= 0.6 && <0.7
-               , scotty >= 0.9 && <0.10
+               , Spock >= 0.7.9 && <0.8
                , aeson >= 0.8 && < 0.9
                , stm >= 2.4 && <2.5
                , wai-extra >= 3.0 && <3.1

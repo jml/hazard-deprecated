@@ -25,20 +25,20 @@ module Hazard ( Hazard
 
 
 import Control.Monad (mzero)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Random (evalRandIO)
 import Control.Monad.STM (STM, atomically)
 import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
-import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString as B
 import Data.Maybe (isJust)
-import Data.Text.Lazy (Text, append, pack)
-import Data.Text.Lazy.Encoding (decodeUtf8)
+import Data.Text (Text, append, pack)
+import Data.Text.Encoding (decodeUtf8)
 import Network.HTTP.Types.Status
 import Network.Wai (requestMethod, pathInfo)
 import Network.Wai.Middleware.HttpAuth
-import Web.Scotty
+import Web.Spock.Safe
 
 
 import Hazard.HttpAuth (maybeLoggedIn)
@@ -101,17 +101,27 @@ addGame hazard game = do
   writeTVar allGames (games' ++ [game])
 
 
-errorMessage :: Status -> Text -> ActionM ()
+errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()
 errorMessage code message = do
-  status code
+  setStatus code
   json (object ["message" .= message])
 
 
-badRequest :: Text -> ActionM ()
+badRequest :: (ToJSON a, MonadIO m) => a -> ActionT m ()
 badRequest = errorMessage badRequest400
 
 
-userWeb :: UserDB -> IO B.ByteString -> ScottyM ()
+expectJSON :: (MonadIO m, FromJSON a) => ActionT m a
+expectJSON = do
+  body' <- jsonBody
+  case body' of
+   Nothing -> do
+     setStatus badRequest400
+     text "Expected JSON, but could not parse it"
+   Just contents -> return contents
+
+
+userWeb :: MonadIO m => UserDB -> IO B.ByteString -> SpockT m ()
 userWeb userDB pwgen = do
 
   middleware $ basicAuth (authUserDB userDB) ("Hazard API" { authIsProtected = isProtected })
@@ -121,22 +131,21 @@ userWeb userDB pwgen = do
     json $ map decodeUtf8 usernames'
 
   post "/users" $ do
-    userRequest <- jsonData
+    userRequest <- expectJSON
     password <- liftIO pwgen
     newID <- liftIO $ atomically $ addUser userDB userRequest password
     case newID of
      Just newID' -> do
-       status created201
+       setStatus created201
        setHeader "Location" (append "/user/" (pack (show newID')))
        json (object ["password" .= decodeUtf8 password])
-     Nothing -> badRequest "username already exists"
+     Nothing -> badRequest ("username already exists" :: Text)
 
-  get "/user/:id" $ do
-    userID <- param "id"
+  get ("user" <//> var) $ \userID -> do
     user <- liftIO $ atomically $ getUserByID userDB userID
     case user of
      Just user' -> json user'
-     Nothing -> errorMessage notFound404 "no such user"
+     Nothing -> errorMessage notFound404 ("no such user" :: Text)
 
   where isProtected req = return $ case (requestMethod req, pathInfo req) of
           (_, "user":_) -> True
@@ -146,11 +155,11 @@ userWeb userDB pwgen = do
 
 authUserDB :: UserDB -> CheckCreds
 authUserDB userDB username password = do
-  found <- liftIO $ atomically $ authenticate userDB (B.fromChunks [username]) (B.fromChunks [password])
+  found <- liftIO $ atomically $ authenticate userDB username password
   return (isJust found)
 
 
-maybeLoggedInUser :: UserDB -> ActionM (Maybe Int)
+maybeLoggedInUser :: MonadIO m => UserDB -> ActionT m (Maybe Int)
 maybeLoggedInUser userDB = do
   req <- request
   case maybeLoggedIn req of
@@ -158,7 +167,7 @@ maybeLoggedInUser userDB = do
    Nothing -> return Nothing
 
 
-loggedInUser :: UserDB -> ActionM Int
+loggedInUser :: MonadIO m => UserDB -> ActionT m Int
 loggedInUser userDB = do
   maybeUser <- maybeLoggedInUser userDB
   case maybeUser of
@@ -167,11 +176,11 @@ loggedInUser userDB = do
    Nothing -> error "No user logged in"
 
 
-hazardWeb :: Hazard -> ScottyM ()
+hazardWeb :: MonadIO m => Hazard -> SpockT m ()
 hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword)
 
 
-hazardWeb' :: Hazard -> IO B.ByteString -> ScottyM ()
+hazardWeb' :: MonadIO m => Hazard -> IO B.ByteString -> SpockT m ()
 hazardWeb' hazard pwgen = do
   get "/" $ html "Hello World!"
   get "/games" $ do
@@ -179,17 +188,16 @@ hazardWeb' hazard pwgen = do
     json ["/game/" ++ show i | i <- [0..length games' - 1]]
   post "/games" $ do
     creator <- loggedInUser (users hazard)
-    gameRequest <- jsonData :: ActionM (GameCreationRequest 'Unchecked)
+    gameRequest <- expectJSON
     case validateCreationRequest gameRequest of
      Left e -> error $ show e  -- XXX: Should be bad request
      Right r -> do
        let newGame = createGame creator r
        liftIO $ atomically $ addGame hazard newGame
-       status created201
+       setStatus created201
        setHeader "Location" "/game/0"
-       raw ""
-  get "/game/:id" $ do
-    gameId <- param "id"
+       json (Nothing :: Maybe Int)
+  get ("game" <//> var) $ \gameId -> do
     game <- liftIO $ atomically $ getGame hazard gameId
     json game
 

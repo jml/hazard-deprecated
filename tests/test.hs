@@ -27,7 +27,7 @@ import Test.Hspec.Wai.JSON
 import Test.Tasty
 import Test.Tasty.Hspec
 
-import Web.Scotty (scottyApp)
+import Web.Spock.Safe (spockAsApp, spockT)
 
 import Hazard (hazardWeb', makeHazard)
 
@@ -38,12 +38,12 @@ import qualified ModelTest
 hazardTestApp :: IO Application
 hazardTestApp = do
   hazard <- atomically makeHazard
-  scottyApp $ hazardWeb' hazard (return "password")
+  spockAsApp $ spockT id $ hazardWeb' hazard (return "password")
 
 
 getAs username url = request "GET" url [authHeader username "password"] ""
 
-postAs username url body = request "POST" url [authHeader username "password"] body
+postAs username url = request "POST" url [authHeader username "password"]
 
 authHeader :: B.ByteString -> B.ByteString -> Header
 authHeader username password = ("Authorization", B.concat ["Basic ", encodedCredentials])
@@ -118,7 +118,7 @@ spec = with hazardTestApp $ do
     it "POST creates game" $ do
       post "/users" [json|{username: "foo"}|]
       postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
-        "" {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
+        [json|null|] {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
     it "Created game appears in list" $ do
       post "/users" [json|{username: "foo"}|]
       postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|]
@@ -126,7 +126,7 @@ spec = with hazardTestApp $ do
     it "Created game has POST data" $ do
       post "/users" [json|{username: "foo"}|]
       postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
-        "" {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
+        [json|null|] {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
       get "/game/0" `shouldRespondWith` [json|{numPlayers: 3, turnTimeout: 3600, creator: 0,
                                               state: "pending", players: [0]}|] {matchStatus = 200}
 

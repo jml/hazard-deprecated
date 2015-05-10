@@ -14,11 +14,11 @@ import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar)
 import Control.Monad (mzero, replicateM)
 import Control.Monad.STM (STM)
 import Control.Monad.Random (Rand, uniform)
-import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString as B
 import Data.Foldable (find)
 import Data.List (findIndex)
-import Data.Text.Lazy (Text)
-import Data.Text.Lazy.Encoding (decodeUtf8, encodeUtf8)
+import Data.Text (Text)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import System.Random (RandomGen)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))

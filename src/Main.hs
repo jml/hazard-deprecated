@@ -16,10 +16,13 @@
 
 module Main where
 
-import Web.Scotty
+import Control.Concurrent.STM (atomically)
+import Web.Spock.Safe
 
-import Hazard (hazardWeb)
+import Hazard (hazardWeb, makeHazard)
 
 
 main :: IO ()
-main = scotty 3000 hazardWeb
+main = do
+  hazard <- atomically makeHazard
+  runSpock 3000 $ spockT id $ hazardWeb hazard

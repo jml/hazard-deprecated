@@ -16,20 +16,21 @@
 
 module Hazard.HttpAuth (maybeLoggedIn) where
 
-import qualified Data.ByteString.Lazy as B
+import Control.Monad.IO.Class (MonadIO)
+import qualified Data.ByteString as B
 import Network.Wai (Request, requestHeaders)
 import Network.Wai.Middleware.HttpAuth
-import Web.Scotty
+import Web.Spock.Safe
 
 
 maybeLoggedIn :: Request -> Maybe B.ByteString
 maybeLoggedIn req = do
   authHeader <- lookup "Authorization" $ requestHeaders req
   (u, _) <- extractBasicAuth authHeader
-  return $ B.fromChunks [u]
+  return u
 
 
-getLoggedIn :: ActionM B.ByteString
+getLoggedIn :: MonadIO m => ActionT m B.ByteString
 getLoggedIn = do
   req <- request
   case maybeLoggedIn req of
