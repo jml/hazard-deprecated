@@ -4,6 +4,7 @@ module Hazard.Users ( UserDB
                     , addUser
                     , authenticate
                     , getUserByID
+                    , getUserIDByName
                     , makeUserDB
                     , makePassword
                     , usernames
@@ -15,6 +16,7 @@ import Control.Monad.STM (STM)
 import Control.Monad.Random (Rand, uniform)
 import qualified Data.ByteString.Lazy as B
 import Data.Foldable (find)
+import Data.List (findIndex)
 import Data.Text.Lazy (Text)
 import Data.Text.Lazy.Encoding (decodeUtf8, encodeUtf8)
 import System.Random (RandomGen)
@@ -64,6 +66,12 @@ getUserByName userDB username = do
   return $ find (\(User u _) -> u == username) allUsers
 
 
+getUserIDByName :: UserDB -> B.ByteString -> STM (Maybe Int)
+getUserIDByName userDB username = do
+  allUsers <- readTVar (unUserDB userDB)
+  return $ findIndex (\(User u _) -> u == username) allUsers
+
+
 
 authenticate :: UserDB -> B.ByteString -> B.ByteString -> STM (Maybe User)
 authenticate userDB username password = do
@@ -84,7 +92,7 @@ addUser userDB req password =
      allUsers <- readTVar users'
      case filter (\(User u _) -> u == username) allUsers of
       [] -> do
-        writeTVar users' (newUser:allUsers)
+        writeTVar users' (allUsers ++ [newUser])
         return $ Just $ length allUsers
       _ -> return Nothing
 

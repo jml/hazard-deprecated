@@ -92,6 +92,14 @@ userSpec = with hazardTestApp $
       post "/users" [json|{username: "foo"}|]
       getAs "foo" "/user/1" `shouldRespondWith` [json|{message: "no such user"}|] {matchStatus = 404}
 
+    it "Creates users with sequential IDs" $ do
+      post "/users" [json|{username: "foo"}|]
+      post "/users" [json|{username: "bar"}|] `shouldRespondWith`
+        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/1"]}
+      getAs "foo" "/user/0" `shouldRespondWith` [json|{username: "foo"}|] {matchStatus = 200}
+      getAs "foo" "/user/1" `shouldRespondWith` [json|{username: "bar"}|] {matchStatus = 200}
+
+
     where requiresAuth = "Basic authentication is required" { matchStatus = 401
                                                             , matchHeaders = [
                                                               "WWW-Authenticate" <:> "Basic realm=\"Hazard API\""

@@ -40,6 +40,9 @@ import Network.Wai (requestMethod, pathInfo)
 import Network.Wai.Middleware.HttpAuth
 import Web.Scotty
 
+
+import Hazard.HttpAuth (maybeLoggedIn)
+
 import Hazard.Model (
   createGame,
   GameCreationRequest(..),
@@ -53,6 +56,7 @@ import Hazard.Users (
   addUser,
   authenticate,
   getUserByID,
+  getUserIDByName,
   makePassword,
   makeUserDB,
   usernames
@@ -146,6 +150,23 @@ authUserDB userDB username password = do
   return (isJust found)
 
 
+maybeLoggedInUser :: UserDB -> ActionM (Maybe Int)
+maybeLoggedInUser userDB = do
+  req <- request
+  case maybeLoggedIn req of
+   Just user -> liftIO $ atomically $ getUserIDByName userDB user
+   Nothing -> return Nothing
+
+
+loggedInUser :: UserDB -> ActionM Int
+loggedInUser userDB = do
+  maybeUser <- maybeLoggedInUser userDB
+  case maybeUser of
+   Just user -> return user
+   -- XXX: Really ought to raise some kind of error.
+   Nothing -> error "No user logged in"
+
+
 hazardWeb :: Hazard -> ScottyM ()
 hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword)
 
@@ -157,12 +178,12 @@ hazardWeb' hazard pwgen = do
     games' <- liftIO $ atomically $ getGames hazard
     json ["/game/" ++ show i | i <- [0..length games' - 1]]
   post "/games" $ do
+    creator <- loggedInUser (users hazard)
     gameRequest <- jsonData :: ActionM (GameCreationRequest 'Unchecked)
     case validateCreationRequest gameRequest of
      Left e -> error $ show e  -- XXX: Should be bad request
      Right r -> do
-       -- XXX: Hardcodes 0 as creator, but should instead be the logged-in user.
-       let newGame = createGame 0 r
+       let newGame = createGame creator r
        liftIO $ atomically $ addGame hazard newGame
        status created201
        setHeader "Location" "/game/0"
