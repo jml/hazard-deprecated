@@ -28,20 +28,6 @@
             from_port: 22
             to_port: 22
             cidr_ip: 0.0.0.0/0
-        rules_egress:
-          - proto: tcp
-            from_port: 80
-            to_port: 80
-            cidr_ip: 91.189.90.0/23
-          - proto: tcp
-            from_port: 443
-            to_port: 443
-            cidr_ip: 91.189.90.0/23
-          # OCSP responder at ocsp.usertrust.com
-          - proto: tcp
-            from_port: 80
-            to_port: 80
-            cidr_ip: 178.255.83.1/32
 
     - name: provision app servers
       ec2:
