@@ -23,15 +23,16 @@
     name: "{{ app_server_user }}"
     system: yes
 
-# XXX: We probably don't want to always upload. We actually only want to
-# upload if there's a delta. Perhaps the right way to do this is to have the
-# binary in some kind of binary package repo.
-- name: upload the app-server binary
+- name: obtain the latest app-server binary
   sudo: yes
   sudo_user: "{{ app_server_user }}"
-  synchronize:
-    src: "{{ binary_path }}"
-    dest: "/home/{{ app_server_user }}"
+  fetch_url:
+    dest: "/home/{{ app_server_user }}/hazard"
+    mode: 0544
+    # XXX: Make this a parameter
+    url: http://hydra.mumak.net/job/loveletter/hazard/build/latest/download/1/hazard/bin/hazard
+    # XXX: Not ideal to have to edit this every time we want to deploy.
+    sha256sum: dd9f07e1fab0813c4da43347ea7e65edc470c54e5b169dd0635d33a4de9e34e3
   notify:
     - restart app-server
 
