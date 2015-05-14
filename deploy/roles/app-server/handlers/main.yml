@@ -5,4 +5,4 @@
 
 - name: restart app-server
   sudo: yes
-  service: name=haverer-api state=restarted
+  service: name=hazard state=restarted

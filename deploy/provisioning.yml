@@ -8,8 +8,8 @@
     region: us-west-2  # XXX: Arbitrarily chosen
     http_port: 80
     https_port: 443
-    domain_name: haverer.jml.io
-    static_domain_name: static.jml.io
+    domain_name: haverer.jml.io # XXX: Duplicated in production.yml
+    static_domain_name: static.jml.io # XXX: Duplicated in production.yml
   tasks:
     - name: configure security group
       ec2_group:
@@ -54,9 +54,9 @@
          exact_count: 1
          region: "{{ region }}"
          count_tag:
-            Name: haverer-api
+            Name: hazard
          instance_tags:
-            Name: haverer-api
+            Name: hazard
       register: ec2
 
     - name: obtain IP address

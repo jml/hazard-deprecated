@@ -12,9 +12,9 @@
   notify:
     - restart nginx
 
-- name: configure haverer-api upstart job
+- name: configure hazard upstart job
   sudo: yes
-  template: src=haverer-api.upstart.j2 dest=/etc/init/haverer-api.conf
+  template: src=hazard.upstart.j2 dest=/etc/init/hazard.conf
 
 - name: create app-server user
   sudo: yes

@@ -1,4 +1,4 @@
-- hosts: tag_Name_haverer-api
+- hosts: tag_Name_hazard
   remote_user: ubuntu
   roles:
     - common
@@ -9,9 +9,9 @@
     domain_name: haverer.jml.io
     static_domain_name: static.jml.io
     app_server_port: 3000
-    static_file_path: /home/haverer-api/static/
-    static_location: /haverer
-    app_server_user: haverer-api
+    static_file_path: /home/hazard/static/
+    static_location: /hazard
+    app_server_user: hazard
     ssl_certificate_path: /etc/ssl/certs/jml.io.pem
     ssl_key_path: /etc/ssl/private/jml.io.key
     ssl_ca_path: /etc/ssl/certs/gandi-ca-bundle.pem
