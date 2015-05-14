@@ -7,10 +7,7 @@
     http_port: 80
     https_port: 443
     domain_name: haverer.jml.io
-    static_domain_name: static.jml.io
     app_server_port: 3000
-    static_file_path: /home/hazard/static/
-    static_location: /hazard
     app_server_user: hazard
     ssl_certificate_path: /etc/ssl/certs/jml.io.pem
     ssl_key_path: /etc/ssl/private/jml.io.key

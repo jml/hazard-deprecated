@@ -10,8 +10,6 @@ env APPROOT=https://{{ domain_name }}
 env HOST=127.0.0.1
 env PORT={{ app_server_port }}
 
-env STATIC_ROOT=https://{{ static_domain_name }}{{ static_location }}
-
 chdir /home/{{ app_server_user }}/
 
 respawn

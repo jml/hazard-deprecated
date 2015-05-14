@@ -9,7 +9,6 @@
     http_port: 80
     https_port: 443
     domain_name: haverer.jml.io # XXX: Duplicated in production.yml
-    static_domain_name: static.jml.io # XXX: Duplicated in production.yml
   tasks:
     - name: configure security group
       ec2_group:
@@ -76,12 +75,3 @@
         type: A
         value: "{{ eip.public_ip }}"
         ttl: 600  # Short TTL while we're still figuring things out
-
-    - name: configure static server DNS
-      route53:
-        command: create
-        overwrite: yes
-        zone: jml.io
-        record: "{{ static_domain_name }}"
-        type: A
-        value: "{{ eip.public_ip }}"
