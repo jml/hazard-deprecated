@@ -11,6 +11,6 @@
     app_server_user: hazard
     ssl_certificate_path: /etc/ssl/certs/jml.io.pem
     ssl_key_path: /etc/ssl/private/jml.io.key
-    ssl_ca_path: /etc/ssl/certs/gandi-ca-bundle.pem
+    ssl_intermediates_path: /etc/ssl/certs/gandi-ca-bundle.pem
     ssl_root_certificate_path: /etc/ssl/certs/AddTrust_External_Root.pem
-    ssl_ca_bundle_path: /etc/ssl/certs/gandi-ca-bundle-full.pem
+    ssl_trusted_certificate_path: /etc/ssl/certs/gandi-ca-bundle-full.pem

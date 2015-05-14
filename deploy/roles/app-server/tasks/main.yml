@@ -3,18 +3,172 @@
   sudo: yes
   apt: pkg={{item}} state=latest
   with_items:
-    - libgmp10
     - nginx
+    - libdbd-sqlite3-perl
+    - libwww-curl-perl
 
-- name: write nginx.conf
+# nix configuration
+
+- name: fetch Nix package
+  get_url:
+    url: http://hydra.nixos.org/build/17897583/download/1/nix_1.8-1_amd64.deb
+    sha256sum: 18886e0bda9a0d23b851bd2391be32da22a4c8946585a92876fec00c480bea87
+    dest: /tmp/nix_1.8-1_amd64.deb
+
+- name: install Nix package
   sudo: yes
-  template: src=nginx.conf.j2 dest=/etc/nginx/nginx.conf
+  command: dpkg -i /tmp/nix_1.8-1_amd64.deb
+
+- name: set up nixbld group
+  sudo: yes
+  group:
+    name: nixbld
+    system: yes
+    state: present
+
+- name: create members of nixbld group 1
+  sudo: yes
+  user:
+    name: nixbld1
+    comment: "Nix build user 1"
+    group: nixbld
+    groups: nixbld
+    system: yes
+    createhome: no
+    shell: /usr/sbin/nologin
+
+- name: create members of nixbld group 2
+  sudo: yes
+  user:
+    name: nixbld2
+    comment: "Nix build user 2"
+    group: nixbld
+    groups: nixbld
+    system: yes
+    createhome: no
+    shell: /usr/sbin/nologin
+
+- name: create members of nixbld group 3
+  sudo: yes
+  user:
+    name: nixbld3
+    comment: "Nix build user 3"
+    group: nixbld
+    groups: nixbld
+    system: yes
+    createhome: no
+    shell: /usr/sbin/nologin
+
+- name: create members of nixbld group 4
+  sudo: yes
+  user:
+    name: nixbld4
+    comment: "Nix build user 4"
+    group: nixbld
+    groups: nixbld
+    system: yes
+    createhome: no
+    shell: /usr/sbin/nologin
+
+- name: create members of nixbld group 5
+  sudo: yes
+  user:
+    name: nixbld5
+    comment: "Nix build user 5"
+    group: nixbld
+    groups: nixbld
+    system: yes
+    createhome: no
+    shell: /usr/sbin/nologin
+
+- name: create members of nixbld group 6
+  sudo: yes
+  user:
+    name: nixbld6
+    comment: "Nix build user 6"
+    group: nixbld
+    groups: nixbld
+    system: yes
+    createhome: no
+    shell: /usr/sbin/nologin
+
+- name: create members of nixbld group 7
+  sudo: yes
+  user:
+    name: nixbld7
+    comment: "Nix build user 7"
+    group: nixbld
+    groups: nixbld
+    system: yes
+    createhome: no
+    shell: /usr/sbin/nologin
+
+- name: create members of nixbld group 8
+  sudo: yes
+  user:
+    name: nixbld8
+    comment: "Nix build user 8"
+    group: nixbld
+    groups: nixbld
+    system: yes
+    createhome: no
+    shell: /usr/sbin/nologin
+
+- name: create members of nixbld group 9
+  sudo: yes
+  user:
+    name: nixbld9
+    comment: "Nix build user 9"
+    group: nixbld
+    groups: nixbld
+    system: yes
+    createhome: no
+    shell: /usr/sbin/nologin
+
+- name: create members of nixbld group 10
+  sudo: yes
+  user:
+    name: nixbld10
+    comment: "Nix build user 10"
+    group: nixbld
+    groups: nixbld
+    system: yes
+    createhome: no
+    shell: /usr/sbin/nologin
+
+- name: launch nix daemon
+  sudo: yes
+  service: name=nix-daemon state=started
+
+- name: update channels
+  sudo: yes
+  shell: nix-channel --update
+
+- name: create nix configuration directory
+  sudo: yes
+  file:
+    path: /etc/nix/
+    state: directory
+    mode: 0755
+
+- name: set binary-caches
+  sudo: yes
+  template: src=nix.conf.j2 dest=/etc/nix/nix.conf
+
+
+# hazard configuration
+
+- name: fetch hazard package
+  get_url:
+    url: http://hydra.mumak.net/job/loveletter/hazard/build/latest/nix/pkg/haskell-hazard-0.1.0.0-x86_64-linux.nixpkg
+    sha256sum: f86cd1185823cbdf353405339dd50e0e55ae747e3651f6c8aeddabff49f5bcee
+    dest: /tmp/haskell-hazard-0.1.0.0-x86_64-linux.nixpkg
+
+- name: install hazard
+  sudo: yes
+  shell: nix-install-package --non-interactive /tmp/haskell-hazard-0.1.0.0-x86_64-linux.nixpkg
   notify:
-    - restart nginx
-
-- name: configure hazard upstart job
-  sudo: yes
-  template: src=hazard.upstart.j2 dest=/etc/init/hazard.conf
+    - restart app-server
 
 - name: create app-server user
   sudo: yes
@@ -23,41 +177,61 @@
     name: "{{ app_server_user }}"
     system: yes
 
-- name: obtain the latest app-server binary
+- name: install hazard wrapper
   sudo: yes
   sudo_user: "{{ app_server_user }}"
-  fetch_url:
-    dest: "/home/{{ app_server_user }}/hazard"
-    mode: 0544
-    # XXX: Make this a parameter
-    url: http://hydra.mumak.net/job/loveletter/hazard/build/latest/download/1/hazard/bin/hazard
-    # XXX: Not ideal to have to edit this every time we want to deploy.
-    sha256sum: dd9f07e1fab0813c4da43347ea7e65edc470c54e5b169dd0635d33a4de9e34e3
+  template:
+    src: run-hazard.j2
+    dest: /home/{{ app_server_user }}/run-hazard
+    mode: 0755
   notify:
     - restart app-server
 
-- name: upload certificate
+- name: configure hazard upstart job
   sudo: yes
-  copy:
-    src: "{{ local_ssl_certificate_path }}"
-    dest: "{{ ssl_certificate_path }}"
+  template: src=hazard.upstart.j2 dest=/etc/init/hazard.conf
 
-- name: upload intermediate certificates
-  sudo: yes
-  copy:
-    src: "{{ local_ssl_ca_path }}"
-    dest: "{{ ssl_ca_path }}"
 
-- name: bundle intermediate certificates with site certificate
-  sudo: yes
-  shell: "cat {{ ssl_ca_path }} >> {{ ssl_certificate_path }}"
+# nginx configuration
 
-- name: bundle intermediate certificates with root certificate
+- name: write nginx.conf
   sudo: yes
-  shell: "cat {{ ssl_ca_path }} {{ ssl_root_certificate_path }} > {{ ssl_ca_bundle_path }}"
+  template: src=nginx.conf.j2 dest=/etc/nginx/nginx.conf
+  notify:
+    - restart nginx
 
 - name: upload key
   sudo: yes
   copy:
     src: "{{ local_ssl_key_path }}"
     dest: "{{ ssl_key_path }}"
+  notify:
+    - restart nginx
+
+- name: upload certificate
+  sudo: yes
+  copy:
+    src: "{{ local_ssl_certificate_path }}"
+    dest: "{{ ssl_certificate_path }}"
+  notify:
+    - restart nginx
+
+- name: upload intermediate certificates
+  sudo: yes
+  copy:
+    src: "{{ local_ssl_intermediates_path }}"
+    dest: "{{ ssl_intermediates_path }}"
+  notify:
+    - restart nginx
+
+- name: ssl cert = base + intermediates
+  sudo: yes
+  shell: "cat {{ ssl_intermediates_path }} >> {{ ssl_certificate_path }}"
+  notify:
+    - restart nginx
+
+- name: trust cert = intermediates + root
+  sudo: yes
+  shell: "cat {{ ssl_intermediates_path }} {{ ssl_root_certificate_path }} > {{ ssl_trusted_certificate_path }}"
+  notify:
+    - restart nginx
