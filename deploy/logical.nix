@@ -27,7 +27,7 @@ in
     # TODO: Obviously need a way of installing the actual haverer binary and
     # running it with appropriate settings.
 
-    webserver = { pkgs, ... }:
+    webserver = { config, pkgs, nodes, ... }:
         let
             # XXX: Can I move this up to top-level let?
             jml_certs = import ../../../jml.io { stdenv = pkgs.stdenv; };
@@ -51,5 +51,5 @@ in
             static_file_path = "/home/haverer-api/static/";
             app_server_port = 3000;
         };
-    })
+    });
 }

@@ -1,17 +1,20 @@
 let
     region = "us-west-2";  # Arbitrarily chosen
+    # XXX: Already exists, should generate instead, and use personal creds.
+    keyPair = "mumak aws";
+    privateKey = "/Users/jml/.ssh/mumakaws.pem";
+    accessKeyId = "default";  # From ~/.ec2-keys
 in
 rec {
 
-    /* Physical */
-    resources.elasticIPs.webserver = {
-        inherit region;
+    resources.elasticIPs.webserverIP = {
+        inherit region accessKeyId;
     };
 
-    resources.ec2SecurityGroups.webserver = {
-        inherit region;
-        name = "webserver"
-        description = "Allow web and SSH traffic"
+    resources.ec2SecurityGroups.http-and-ssh = {
+        inherit region accessKeyId;
+        name = "http-and-ssh";
+        description = "Allow web and SSH traffic";
         # XXX: There's currently no way of allowing egress. Would like to
         # allow OCSP responder at 178.255.83.1/32 on port 80:
         # https://github.com/NixOS/nixops/issues/295
@@ -26,22 +29,17 @@ rec {
     };
 
     webserver = { resources, ... }: {
-        inherit region;
         deployment.targetEnv = "ec2";
         deployment.ec2.region = region;
+        deployment.ec2.accessKeyId = accessKeyId;
         deployment.ec2.instanceType = "t2.micro";
         deployment.ec2.ebsInitialRootDiskSize = 30;
-        deployment.ec2.elasticIPv4 = resources.elasticIPs.webserver;
-        deployment.ec2.keyPair = /* XXX: fill this in */;
-        deployment.ec2.securityGroups = [ resources.ec2SecurityGroups.webserver ];
-        deployment.ec2.elasticIPv4 = resources.elasticIPs.webserver;
-        # XXX: The host should have *two* DNS names: haverer.jml.io, and
-        # static.jml.io. It's not clear how to specify this with nixops
-        # https://github.com/NixOS/nixops/issues/174
-        deployment.route53 = {
-            hostName = "haverer.jml.io"
-            ttl = 600
+        deployment.ec2.securityGroups = [ resources.ec2SecurityGroups.http-and-ssh ];
+        deployment.ec2.elasticIPv4 = resources.elasticIPs.webserverIP;
+        deployment.ec2.tags = {
+            Name = "hazard";
         };
+        deployment.ec2.keyPair = keyPair;
+        deployment.ec2.privateKey = privateKey;
     };
-
 }
