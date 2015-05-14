@@ -1,0 +1,17 @@
+description "hazard"
+author "jml@mumak.net"
+
+start on runlevel [2345]
+stop on runlevel [!2345]
+
+setuid {{ app_server_user }}
+
+env APPROOT=https://{{ domain_name }}
+env HOST=127.0.0.1
+env PORT={{ app_server_port }}
+
+chdir /home/{{ app_server_user }}/
+
+respawn
+
+exec /home/{{ app_server_user }}/run-hazard

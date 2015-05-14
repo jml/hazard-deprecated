@@ -1,0 +1,16 @@
+- hosts: tag_Name_hazard
+  remote_user: ubuntu
+  roles:
+    - common
+    - app-server
+  vars:
+    http_port: 80
+    https_port: 443
+    domain_name: haverer.jml.io
+    app_server_port: 3000
+    app_server_user: hazard
+    ssl_certificate_path: /etc/ssl/certs/jml.io.pem
+    ssl_key_path: /etc/ssl/private/jml.io.key
+    ssl_intermediates_path: /etc/ssl/certs/gandi-ca-bundle.pem
+    ssl_root_certificate_path: /etc/ssl/certs/AddTrust_External_Root.pem
+    ssl_trusted_certificate_path: /etc/ssl/certs/gandi-ca-bundle-full.pem
