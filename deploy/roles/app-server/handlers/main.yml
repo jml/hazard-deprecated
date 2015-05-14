@@ -1,0 +1,8 @@
+---
+- name: restart nginx
+  sudo: yes
+  service: name=nginx state=restarted
+
+- name: restart app-server
+  sudo: yes
+  service: name=haverer-api state=restarted
