@@ -25,7 +25,7 @@ import Test.Hspec.Wai.JSON
 import Test.Tasty
 import Test.Tasty.Hspec
 
-import Utils (hazardTestApp, getAs)
+import Utils (hazardTestApp, getAs, requiresAuth)
 
 
 suite :: IO TestTree
@@ -79,10 +79,3 @@ spec = with hazardTestApp $
         [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/1"]}
       getAs "foo" "/user/0" `shouldRespondWith` [json|{username: "foo"}|] {matchStatus = 200}
       getAs "foo" "/user/1" `shouldRespondWith` [json|{username: "bar"}|] {matchStatus = 200}
-
-
-    where requiresAuth = "Basic authentication is required" { matchStatus = 401
-                                                            , matchHeaders = [
-                                                              "WWW-Authenticate" <:> "Basic realm=\"Hazard API\""
-                                                              ]
-                                                            }

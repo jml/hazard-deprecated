@@ -17,6 +17,7 @@
 module Utils ( hazardTestApp
              , getAs
              , postAs
+             , requiresAuth
              ) where
 
 import Control.Monad.STM (atomically)
@@ -37,11 +38,19 @@ hazardTestApp = do
   hazard <- atomically makeHazard
   spockAsApp $ spockT id $ hazardWeb' hazard (return "password")
 
-
 getAs username url = request "GET" url [authHeader username "password"] ""
 
 postAs username url = request "POST" url [authHeader username "password"]
 
+
 authHeader :: B.ByteString -> B.ByteString -> Header
 authHeader username password = ("Authorization", B.concat ["Basic ", encodedCredentials])
   where encodedCredentials = Base64.encode $ B.concat [username, ":", password]
+
+
+requiresAuth :: ResponseMatcher
+requiresAuth = "Basic authentication is required" { matchStatus = 401
+                                                  , matchHeaders = [
+                                                    "WWW-Authenticate" <:> "Basic realm=\"Hazard API\""
+                                                    ]
+                                                  }
