@@ -88,8 +88,8 @@ getGames :: Hazard -> STM [GameSlot Int]
 getGames = readTVar . games
 
 
-getGame :: Hazard -> Int -> STM (Maybe (GameSlot Int))
-getGame hazard i = do
+getGameSlot :: Hazard -> Int -> STM (Maybe (GameSlot Int))
+getGameSlot hazard i = do
   games' <- readTVar (games hazard)
   if 0 <= i && i < length games'
     then return $ Just (games' !! i)
@@ -210,14 +210,14 @@ hazardWeb' hazard pwgen = do
        json (Nothing :: Maybe Int)
 
   get ("game" <//> var) $ \gameId -> do
-    game <- liftIO $ atomically $ getGame hazard gameId
+    game <- liftIO $ atomically $ getGameSlot hazard gameId
     case game of
      Just game' -> json game'
      Nothing -> errorMessage notFound404 ("no such game" :: Text)
 
   post ("game" <//> var) $ \gameId -> do
     joiner <- loggedInUser (users hazard)
-    game <- liftIO $ atomically $ getGame hazard gameId
+    game <- liftIO $ atomically $ getGameSlot hazard gameId
     case game of
      Nothing -> errorMessage notFound404 ("no such game" :: Text)
      Just game' ->
