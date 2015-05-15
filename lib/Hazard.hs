@@ -28,7 +28,7 @@ import Control.Monad (mzero)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Random (evalRandIO)
 import Control.Monad.STM (STM, atomically)
-import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar)
+import Control.Concurrent.STM (TVar, newTVar, modifyTVar, readTVar, writeTVar)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 import qualified Data.ByteString as B
@@ -47,6 +47,8 @@ import Hazard.Model (
   createGame,
   GameCreationRequest(..),
   GameSlot,
+  JoinError(..),
+  joinGame,
   requestGame,
   Validated(Unchecked),
   validateCreationRequest)
@@ -101,6 +103,12 @@ addGame hazard game = do
   writeTVar allGames (games' ++ [game])
 
 
+setGame :: Hazard -> Int -> GameSlot Int -> STM ()
+setGame hazard i game =
+  modifyTVar (games hazard) $
+    \games' -> take i games' ++ [game] ++ drop (i+1) games'
+
+
 errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()
 errorMessage code message = do
   setStatus code
@@ -150,6 +158,7 @@ userWeb userDB pwgen = do
   where isProtected req = return $ case (requestMethod req, pathInfo req) of
           (_, "user":_) -> True
           ("POST", "games":_) -> True
+          ("POST", "game":_) -> True
           _ -> False
 
 
@@ -183,9 +192,11 @@ hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword)
 hazardWeb' :: MonadIO m => Hazard -> IO B.ByteString -> SpockT m ()
 hazardWeb' hazard pwgen = do
   get "/" $ html "Hello World!"
+
   get "/games" $ do
     games' <- liftIO $ atomically $ getGames hazard
     json ["/game/" ++ show i | i <- [0..length games' - 1]]
+
   post "/games" $ do
     creator <- loggedInUser (users hazard)
     gameRequest <- expectJSON
@@ -197,8 +208,25 @@ hazardWeb' hazard pwgen = do
        setStatus created201
        setHeader "Location" "/game/0"
        json (Nothing :: Maybe Int)
+
   get ("game" <//> var) $ \gameId -> do
     game <- liftIO $ atomically $ getGame hazard gameId
-    json game
+    case game of
+     Just game' -> json game'
+     Nothing -> errorMessage notFound404 ("no such game" :: Text)
+
+  post ("game" <//> var) $ \gameId -> do
+    joiner <- loggedInUser (users hazard)
+    game <- liftIO $ atomically $ getGame hazard gameId
+    case game of
+     Nothing -> errorMessage notFound404 ("no such game" :: Text)
+     Just game' ->
+       case joinGame game' joiner of
+        Left AlreadyJoined -> json game'
+        Left AlreadyStarted -> badRequest ("Game already started" :: Text)
+        Right r -> do
+          liftIO $ atomically $ setGame hazard gameId r
+          json r
+
 
   userWeb (users hazard) pwgen

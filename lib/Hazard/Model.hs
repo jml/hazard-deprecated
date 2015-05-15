@@ -21,6 +21,7 @@ module Hazard.Model ( GameCreationError(..)
                     , GameCreationRequest(reqNumPlayers, reqTurnTimeout)
                     , GameSlot
                     , Game(Pending, InProgress)
+                    , JoinError(..)
                     , Seconds
                     , Validated(..)
                     , creator
@@ -93,6 +94,12 @@ instance ToJSON a => ToJSON (GameSlot a) where
                           , "numPlayers" .= numPlayers slot
                           , "players" .= players slot
                           ]
+     InProgress {} -> object [ "turnTimeout" .= turnTimeout slot
+                             , "creator" .= creator slot
+                             , "state" .= ("in-progress" :: Text)
+                             , "numPlayers" .= numPlayers slot
+                             , "players" .= players slot
+                             ]
 
 
 createGame :: a -> GameCreationRequest 'Valid -> GameSlot a

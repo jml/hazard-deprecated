@@ -17,6 +17,12 @@
 
 module GameTest (suite) where
 
+import Data.Aeson hiding (json)
+import qualified Data.ByteString as B
+import Data.Text (Text)
+import Data.Text.Encoding (encodeUtf8)
+
+import Network.Wai.Test (SResponse(..))
 import Test.Hspec.Wai
 import Test.Hspec.Wai.JSON
 import Test.Tasty
@@ -47,12 +53,63 @@ spec = with hazardTestApp $ do
       post "/users" [json|{username: "foo"}|]
       postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|]
       get "/games" `shouldRespondWith` [json|["/game/0"]|]
-    it "Created game has POST data" $ do
+
+  describe "/game/N" $ do
+    it "GET returns 404 if it hasn't been created" $
+      get "/game/0" `shouldRespondWith` 404
+
+    it "POST returns 404 if it hasn't been created" $ do
       post "/users" [json|{username: "foo"}|]
-      postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
-        [json|null|] {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
-      get "/game/0" `shouldRespondWith` [json|{numPlayers: 3, turnTimeout: 3600, creator: 0,
-                                              state: "pending", players: [0]}|] {matchStatus = 200}
+      postAs "foo" "/game/0" [json|null|] `shouldRespondWith` 404
+
+    it "Created game has POST data" $ do
+      game <- makeGameAs "foo" 3
+      get game `shouldRespondWith` [json|{numPlayers: 3, turnTimeout: 3600, creator: 0,
+                                          state: "pending", players: [0]}|] {matchStatus = 200}
+
+    it "POST without authorization fails" $ do
+      game <- makeGameAs "foo" 3
+      post game [json|null|] `shouldRespondWith` requiresAuth
+
+    it "Can be re-joined by same player" $ do
+      game <- makeGameAs "foo" 3
+      postAs "foo" game [json|null|] `shouldRespondWith`
+        [json|{numPlayers: 3, turnTimeout: 3600, creator: 0,
+               state: "pending", players: [0]}|] {matchStatus = 200}
+
+    it "POST joins game" $ do
+      game <- makeGameAs "foo" 3
+      post "/users" [json|{username: "bar"}|]
+      -- XXX: This tests the "order" that players appear in, when really I don't care.
+      postAs "bar" game [json|null|] `shouldRespondWith`
+        [json|{numPlayers: 3, turnTimeout: 3600, creator: 0,
+               state: "pending", players: [1, 0]}|] {matchStatus = 200}
+
+    it "POSTing to started game returns bad request" $ do
+      game <- makeGameAs "foo" 2
+      post "/users" [json|{username: "bar"}|]
+      postAs "bar" game [json|null|]
+      post "/users" [json|{username: "qux"}|]
+      postAs "bar" game [json|null|] `shouldRespondWith`
+        [json|{message: "Game already started"}|] {matchStatus = 400}
+
+    it "Game starts when enough people have joined" $ do
+      game <- makeGameAs "foo" 2
+      post "/users" [json|{username: "bar"}|]
+      postAs "bar" game [json|null|] `shouldRespondWith`
+        [json|{numPlayers: 2, turnTimeout: 3600, creator: 0,
+               state: "in-progress", players: [1, 0]}|] {matchStatus = 200}
+
+    where
+      makeGameAs :: Text -> Int -> WaiSession B.ByteString
+      makeGameAs user numPlayers = do
+        post "/users" (encode $ object ["username" .= (user :: Text)])
+        response <- postAs (encodeUtf8 user) "/games" (encode $
+                                                       object ["turnTimeout" .= (3600 :: Int)
+                                                              ,"numPlayers" .= numPlayers])
+        case lookup "Location" (simpleHeaders response) of
+         Just path -> return path
+         Nothing -> error "Did not create game: could not find return header"
 
 
 suite :: IO TestTree
