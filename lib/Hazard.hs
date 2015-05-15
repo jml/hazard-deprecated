@@ -225,8 +225,10 @@ hazardWeb' hazard pwgen = do
         Left AlreadyJoined -> json game'
         Left AlreadyStarted -> badRequest ("Game already started" :: Text)
         Right r -> do
-          liftIO $ atomically $ setGame hazard gameId r
-          json r
+          game'' <- liftIO $ evalRandIO r
+          liftIO $ atomically $ setGame hazard gameId game''
+          json game''
+
 
 
   userWeb (users hazard) pwgen

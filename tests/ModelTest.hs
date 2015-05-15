@@ -18,6 +18,9 @@
 
 module ModelTest (suite) where
 
+import Control.Monad.Random (evalRand)
+import System.Random (mkStdGen)
+
 import Test.Tasty
 import Test.Tasty.QuickCheck
 
@@ -68,7 +71,7 @@ addPlayers n g =
       p <- arbitrary `suchThat` (`notElem` players g')
       case joinGame g' p of
        Left e -> error $ show e
-       Right r -> return r
+       Right r -> return (evalRand r (mkStdGen 42))
 
 
 prop_creatorInPlayers :: Eq a => GameSlot a -> Bool

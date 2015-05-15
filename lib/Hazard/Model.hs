@@ -35,11 +35,16 @@ module Hazard.Model ( GameCreationError(..)
                     , validateCreationRequest
                     ) where
 
+import Prelude hiding (round)
 
+import Control.Monad.Random (MonadRandom)
 import Data.Aeson (ToJSON(..), object, (.=))
 import Data.Text (Text)
 import qualified Haverer.Game as H
+
+
 import Haverer.Player (toPlayers, toPlayerSet)
+import Haverer.Round (Round)
 
 
 type Seconds = Int
@@ -81,7 +86,9 @@ data GameSlot a = GameSlot {
 data Game a = Pending { _numPlayers :: Int
                       , _players :: [a]
                       }
-            | InProgress { game :: H.Game a }
+            | InProgress { game :: H.Game a
+                         , rounds :: [Round a]
+                         }
             deriving (Show)
 
 
@@ -127,19 +134,23 @@ players =
 
 data JoinError = AlreadyStarted | AlreadyJoined deriving (Eq, Show)
 
-joinGame :: (Show a, Ord a) => GameSlot a -> a -> Either JoinError (GameSlot a)
+joinGame :: (MonadRandom m, Show a, Ord a) => GameSlot a -> a -> Either JoinError (m (GameSlot a))
 joinGame slot p = do
   newState <- joinGame' (gameState slot) p
-  return $ slot { gameState = newState }
+  return $ do
+    newState' <- newState
+    return $ slot { gameState = newState' }
 
 
-joinGame' :: (Show a, Ord a) => Game a -> a -> Either JoinError (Game a)
+joinGame' :: (Show a, Ord a, MonadRandom m) => Game a -> a -> Either JoinError (m (Game a))
 joinGame' (InProgress {}) _ = Left AlreadyStarted
 joinGame' (Pending {..}) p
   | p `elem` _players = Left AlreadyJoined
-  | numNewPlayers == _numPlayers = Right $ InProgress newGame
-  | otherwise = Right Pending { _numPlayers = _numPlayers
-                              , _players = newPlayers }
+  | numNewPlayers == _numPlayers = Right $ do
+      round <- H.newRound newGame
+      return $ InProgress newGame (pure round)
+  | otherwise = Right $ return Pending { _numPlayers = _numPlayers
+                                       , _players = newPlayers }
   where newPlayers = p:_players
         numNewPlayers = length newPlayers
         newGame = case toPlayerSet newPlayers of
