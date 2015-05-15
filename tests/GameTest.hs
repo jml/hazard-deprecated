@@ -27,11 +27,11 @@ import Utils (hazardTestApp, postAs)
 
 spec :: Spec
 spec = with hazardTestApp $ do
-  describe "GET /" $ do
-    it "responds with 200" $ do
+  describe "GET /" $
+    it "responds with 200" $
       get "/" `shouldRespondWith` 200
   describe "/games" $ do
-    it "GET returns empty list when there are no games" $ do
+    it "GET returns empty list when there are no games" $
       get "/games" `shouldRespondWith` [json|[]|]
     it "POST creates game" $ do
       post "/users" [json|{username: "foo"}|]
