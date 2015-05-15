@@ -22,7 +22,7 @@ import Test.Hspec.Wai.JSON
 import Test.Tasty
 import Test.Tasty.Hspec
 
-import Utils (hazardTestApp, postAs)
+import Utils (hazardTestApp, postAs, requiresAuth)
 
 
 spec :: Spec
@@ -30,13 +30,19 @@ spec = with hazardTestApp $ do
   describe "GET /" $
     it "responds with 200" $
       get "/" `shouldRespondWith` 200
+
   describe "/games" $ do
     it "GET returns empty list when there are no games" $
       get "/games" `shouldRespondWith` [json|[]|]
+
     it "POST creates game" $ do
       post "/users" [json|{username: "foo"}|]
       postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
         [json|null|] {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
+
+    it "unauthenticated POST fails" $
+      post "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith` requiresAuth
+
     it "Created game appears in list" $ do
       post "/users" [json|{username: "foo"}|]
       postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|]
