@@ -38,15 +38,17 @@ module Hazard.Model ( GameCreationError(..)
 
 import Prelude hiding (round)
 
+import Control.Monad (mzero)
 import Control.Monad.Random (MonadRandom)
-import Data.Aeson (ToJSON(..), object, (.=), Value)
+import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), Value(..))
 import qualified Data.Map as Map
 import Data.Maybe (isJust)
+import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Haverer.Game as H
 
 
-import Haverer.Deck (Card)
+import Haverer.Deck (Card(..))
 import Haverer.Player (Player, getDiscards, getHand, isProtected, toPlayers, toPlayerSet)
 import Haverer.Round (currentPlayer, getPlayerMap, Round)
 
@@ -129,9 +131,28 @@ playerToJSON pid player =
          ]
 
 
+
+-- XXX: quickcheck these are inverse of each other
+
 instance ToJSON Card where
 
   toJSON = toJSON . show
+
+
+instance FromJSON Card where
+
+  parseJSON (String s) =
+    case Text.toLower s of
+     "soldier"   -> return Soldier
+     "clown"     -> return Clown
+     "knight"    -> return Knight
+     "priestess" -> return Priestess
+     "wizard"    -> return Wizard
+     "general"   -> return General
+     "minister"  -> return Minister
+     "prince"    -> return Prince
+     _ -> mzero
+  parseJSON _ = mzero
 
 
 createGame :: a -> GameCreationRequest 'Valid -> GameSlot a
