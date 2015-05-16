@@ -17,10 +17,14 @@
 
 module GameTest (suite) where
 
+import Control.Monad (unless)
 import Data.Aeson hiding (json)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as L
+import Data.Foldable (for_)
 import Data.Text (Text)
-import Data.Text.Encoding (encodeUtf8)
+import qualified Data.Text as Text
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 
 import Network.Wai.Test (SResponse(..))
 import Test.Hspec.Wai
@@ -97,19 +101,97 @@ spec = with hazardTestApp $ do
       game <- makeGameAs "foo" 2
       post "/users" [json|{username: "bar"}|]
       postAs "bar" game [json|null|] `shouldRespondWith`
-        [json|{numPlayers: 2, turnTimeout: 3600, creator: 0,
-               state: "in-progress", players: [1, 0]}|] {matchStatus = 200}
+        [json|{numPlayers: 2,
+               turnTimeout: 3600,
+               creator: 0,
+               state: "in-progress",
+               players: [1, 0],
+               scores: [0, 0]}|] {matchStatus = 200}
 
-    where
-      makeGameAs :: Text -> Int -> WaiSession B.ByteString
-      makeGameAs user numPlayers = do
-        post "/users" (encode $ object ["username" .= (user :: Text)])
-        response <- postAs (encodeUtf8 user) "/games" (encode $
-                                                       object ["turnTimeout" .= (3600 :: Int)
-                                                              ,"numPlayers" .= numPlayers])
-        case lookup "Location" (simpleHeaders response) of
-         Just path -> return path
-         Nothing -> error "Did not create game: could not find return header"
+  describe "Playing a game" $ do
+    it "Rounds don't exist for unstarted game" $ do
+      game <- makeGameAs "foo" 2
+      get (B.concat [game, "/round/0"]) `shouldRespondWith` 404
+
+    it "started game is started" $ do
+      (game, _) <- makeStartedGame 3
+      get game `shouldRespondWith` [json|{
+                                       numPlayers: 3,
+                                       turnTimeout: 3600,
+                                       creator: 0,
+                                       state: "in-progress",
+                                       players: [2,1,0],
+                                       scores: [0,0,0]
+                                       }|] {matchStatus = 200}
+
+    it "Rounds do exist for started games" $ do
+      -- XXX: This warning here means that we'e only ever dealing with the
+      -- integer player IDs, and never the user names. I don't know whether
+      -- that's a good thing or a bad thing, so I'm going to leave it as
+      -- integers until we start implementing actual clients.
+      (game, [foo, bar, baz]) <- makeStartedGame 3
+      get (B.concat [game, "/round/0"]) `hasJsonResponse`
+        object [
+          "players" .= [
+             object [
+                "id" .= (0 :: Int),
+                "active" .= True,
+                "protected" .= False,
+                "discards" .= ([] :: [Int])
+                ],
+             object [
+               "id" .= (1 :: Int),
+               "active" .= True,
+               "protected" .= False,
+               "discards" .= ([] :: [Int])
+               ],
+             object [
+               "id" .= (2 :: Int),
+               "active" .= True,
+               "protected" .= False,
+               "discards" .= ([] :: [Int])
+               ]
+             ],
+          -- XXX: *Actually* the first player should be randomized. Currently
+          -- it's always the last person who signed up.
+          "currentPlayer" .= (2 :: Int)
+          ]
+
+  where
+    makeGameAs :: Text -> Int -> WaiSession B.ByteString
+    makeGameAs user numPlayers = do
+      post "/users" (encode $ object ["username" .= (user :: Text)])
+      response <- postAs (encodeUtf8 user) "/games" (encode $
+                                                     object ["turnTimeout" .= (3600 :: Int)
+                                                            ,"numPlayers" .= numPlayers])
+      case lookup "Location" (simpleHeaders response) of
+       Just path -> return path
+       Nothing -> error "Did not create game: could not find return header"
+
+    makeStartedGame :: Int -> WaiSession (B.ByteString, [Text])
+    makeStartedGame n =
+      let userPool = ["foo", "bar", "baz", "qux"]
+          users = take n userPool
+          creator:others = users
+      in do
+        game <- makeGameAs creator n
+        for_ others (\u -> do post "/users" (encode $ object ["username" .= u])
+                              postAs (encodeUtf8 u) game [json|null|] `shouldRespondWith` 200)
+        return (game, users)
+
+    hasJsonResponse :: WaiSession SResponse -> Value -> WaiSession ()
+    hasJsonResponse response value = do
+      body <- simpleBody <$> response
+      unless (decode body == Just value)
+        (liftIO $ expectationFailure $ unlines [
+            "Expected: " ++ lazyToString (encode value),
+            "Actual: " ++ lazyToString body
+            ])
+
+
+-- XXX: Is there an easier way?
+lazyToString :: L.ByteString -> String
+lazyToString = Text.unpack . decodeUtf8 . L.toStrict
 
 
 suite :: IO TestTree

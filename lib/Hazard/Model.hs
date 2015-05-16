@@ -27,6 +27,7 @@ module Hazard.Model ( GameCreationError(..)
                     , creator
                     , createGame
                     , gameState
+                    , getRound
                     , joinGame
                     , numPlayers
                     , players
@@ -38,13 +39,16 @@ module Hazard.Model ( GameCreationError(..)
 import Prelude hiding (round)
 
 import Control.Monad.Random (MonadRandom)
-import Data.Aeson (ToJSON(..), object, (.=))
+import Data.Aeson (ToJSON(..), object, (.=), Value)
+import qualified Data.Map as Map
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Haverer.Game as H
 
 
-import Haverer.Player (toPlayers, toPlayerSet)
-import Haverer.Round (Round)
+import Haverer.Deck (Card)
+import Haverer.Player (Player, getDiscards, getHand, isProtected, toPlayers, toPlayerSet)
+import Haverer.Round (currentPlayer, getPlayerMap, Round)
 
 
 type Seconds = Int
@@ -106,7 +110,28 @@ instance ToJSON a => ToJSON (GameSlot a) where
                              , "state" .= ("in-progress" :: Text)
                              , "numPlayers" .= numPlayers slot
                              , "players" .= players slot
+                             , "scores" .= replicate (length (players slot)) (0 :: Int)
                              ]
+
+
+instance ToJSON a => ToJSON (Round a) where
+  toJSON round = object [ "players" .= (map (uncurry playerToJSON) .  Map.assocs . getPlayerMap) round
+                        , "currentPlayer" .= currentPlayer round
+                        ]
+
+
+playerToJSON :: ToJSON a => a -> Player -> Value
+playerToJSON pid player =
+  object [ "id" .= pid
+         , "active" .= (isJust . getHand) player
+         , "protected" .= isProtected player
+         , "discards" .= getDiscards player
+         ]
+
+
+instance ToJSON Card where
+
+  toJSON = toJSON . show
 
 
 createGame :: a -> GameCreationRequest 'Valid -> GameSlot a
@@ -130,6 +155,13 @@ players =
   players' . gameState
   where players' (Pending { _players = _players }) = _players
         players' (InProgress { game = game }) = (toPlayers . H.players) game
+
+
+getRound :: Game a -> Int -> Maybe (Round a)
+getRound InProgress { rounds = rounds } i
+  | 0 <= i && i < length rounds = Just $ rounds !! i
+  | otherwise = Nothing
+getRound _ _ = Nothing
 
 
 data JoinError = AlreadyStarted | AlreadyJoined deriving (Eq, Show)

@@ -24,6 +24,8 @@ module Hazard ( Hazard
               ) where
 
 
+import Prelude hiding (round)
+
 import Control.Monad (mzero)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Random (evalRandIO)
@@ -41,8 +43,12 @@ import Network.Wai.Middleware.HttpAuth
 import Web.Spock.Safe
 
 
+import Haverer.Round (Round)
+
+
 import Hazard.HttpAuth (maybeLoggedIn)
 
+import qualified Hazard.Model as Model
 import Hazard.Model (
   createGame,
   GameCreationRequest(..),
@@ -94,6 +100,11 @@ getGameSlot hazard i = do
   if 0 <= i && i < length games'
     then return $ Just (games' !! i)
     else return Nothing
+
+
+getRound :: Hazard -> Int -> Int -> STM (Maybe (Round Int))
+getRound hazard i j =
+  (fmap . (=<<)) (flip Model.getRound j . Model.gameState) (getGameSlot hazard i)
 
 
 addGame :: Hazard -> GameSlot Int -> STM ()
@@ -229,6 +240,12 @@ hazardWeb' hazard pwgen = do
           liftIO $ atomically $ setGame hazard gameId game''
           json game''
 
+  get ("game" <//> var <//> "round" <//> var) $ \gameId roundId -> do
+    round <- liftIO $ atomically $ getRound hazard gameId roundId
+    case round of
+     Nothing -> errorMessage notFound404 ("no such round" :: Text)
+     Just _ ->
+       json round
 
 
   userWeb (users hazard) pwgen
