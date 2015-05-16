@@ -56,6 +56,7 @@ import Hazard.Model (
   JoinError(..),
   joinGame,
   requestGame,
+  roundToJSON,
   Validated(Unchecked),
   validateCreationRequest)
 
@@ -241,11 +242,11 @@ hazardWeb' hazard pwgen = do
           json game''
 
   get ("game" <//> var <//> "round" <//> var) $ \gameId roundId -> do
+    viewer <- maybeLoggedInUser (users hazard)
     round <- liftIO $ atomically $ getRound hazard gameId roundId
     case round of
      Nothing -> errorMessage notFound404 ("no such round" :: Text)
-     Just _ ->
-       json round
+     Just round' -> json (roundToJSON viewer round')
 
 
   userWeb (users hazard) pwgen

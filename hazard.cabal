@@ -83,3 +83,4 @@ test-suite test
                , random >= 1.1 && <1.2
                , haverer
                , hazard
+               , haverer

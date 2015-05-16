@@ -19,9 +19,11 @@ module GameTest (suite) where
 
 import Control.Monad (unless)
 import Data.Aeson hiding (json)
+import Data.Aeson.Types (Parser, parseMaybe)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.Foldable (for_)
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
@@ -32,7 +34,9 @@ import Test.Hspec.Wai.JSON
 import Test.Tasty
 import Test.Tasty.Hspec
 
-import Utils (hazardTestApp, postAs, requiresAuth)
+import Haverer.Deck (Card)
+
+import Utils (getAs, hazardTestApp, postAs, requiresAuth)
 
 
 spec :: Spec
@@ -108,6 +112,7 @@ spec = with hazardTestApp $ do
                players: [1, 0],
                scores: [0, 0]}|] {matchStatus = 200}
 
+
   describe "Playing a game" $ do
     it "Rounds don't exist for unstarted game" $ do
       game <- makeGameAs "foo" 2
@@ -157,6 +162,17 @@ spec = with hazardTestApp $ do
           "currentPlayer" .= (2 :: Int)
           ]
 
+    it "Shows your hand when you GET" $ do
+      (game, [_, bar, _]) <- makeStartedGame 3
+      response <- getAs (encodeUtf8 bar) (B.concat [game, "/round/0"])
+      jsonResponseIs response (isJust . getJsonHand 1) True
+
+    it "Doesn't show other hands when you GET" $ do
+      (game, [_, bar, _]) <- makeStartedGame 3
+      response <- getAs (encodeUtf8 bar) (B.concat [game, "/round/0"])
+      jsonResponseIs response (isJust . getJsonHand 0) False
+      jsonResponseIs response (isJust . getJsonHand 2) False
+
   where
     makeGameAs :: Text -> Int -> WaiSession B.ByteString
     makeGameAs user numPlayers = do
@@ -179,14 +195,25 @@ spec = with hazardTestApp $ do
                               postAs (encodeUtf8 u) game [json|null|] `shouldRespondWith` 200)
         return (game, users)
 
-    hasJsonResponse :: WaiSession SResponse -> Value -> WaiSession ()
-    hasJsonResponse response value = do
-      body <- simpleBody <$> response
-      unless (decode body == Just value)
+    getJsonHand :: Int -> Value -> Maybe Card
+    getJsonHand i = parseMaybe (withObject "expected round object" (
+                                   \obj -> do players <- obj .: "players"
+                                              (players !! i) .: "hand"))
+
+
+    jsonResponseIs :: (FromJSON a, Eq b, Show b) => SResponse -> (a -> b) -> b -> WaiSession ()
+    jsonResponseIs response f value =
+      unless ((f <$> decode body) == Just value)
         (liftIO $ expectationFailure $ unlines [
-            "Expected: " ++ lazyToString (encode value),
+            "Expected: " ++ show value,
             "Actual: " ++ lazyToString body
             ])
+      where body = simpleBody response
+
+    hasJsonResponse :: (Eq a, Show a, FromJSON a, ToJSON a) => WaiSession SResponse -> a -> WaiSession ()
+    hasJsonResponse response x = do
+      response' <- response
+      jsonResponseIs response' id x
 
 
 -- XXX: Is there an easier way?

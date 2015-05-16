@@ -32,6 +32,7 @@ module Hazard.Model ( GameCreationError(..)
                     , numPlayers
                     , players
                     , requestGame
+                    , roundToJSON
                     , turnTimeout
                     , validateCreationRequest
                     ) where
@@ -116,20 +117,30 @@ instance ToJSON a => ToJSON (GameSlot a) where
                              ]
 
 
-instance ToJSON a => ToJSON (Round a) where
-  toJSON round = object [ "players" .= (map (uncurry playerToJSON) .  Map.assocs . getPlayerMap) round
-                        , "currentPlayer" .= currentPlayer round
-                        ]
+instance (Eq a, ToJSON a) => ToJSON (Round a) where
+  toJSON = roundToJSON Nothing
 
 
-playerToJSON :: ToJSON a => a -> Player -> Value
-playerToJSON pid player =
-  object [ "id" .= pid
-         , "active" .= (isJust . getHand) player
-         , "protected" .= isProtected player
-         , "discards" .= getDiscards player
+roundToJSON :: (Eq a, ToJSON a) => Maybe a -> Round a -> Value
+roundToJSON someone round =
+  object [ "players" .= (map (uncurry (playerToJSON someone)) .  Map.assocs . getPlayerMap) round
+         , "currentPlayer" .= currentPlayer round
          ]
 
+
+playerToJSON :: (Eq a, ToJSON a) => Maybe a -> a -> Player -> Value
+playerToJSON someone pid player =
+  case someone of
+   Nothing -> object commonFields
+   Just viewer
+     | viewer == pid -> object $ ("hand" .= getHand player):commonFields
+     | otherwise -> playerToJSON Nothing pid player
+  where commonFields =
+          [ "id" .= pid
+          , "active" .= (isJust . getHand) player
+          , "protected" .= isProtected player
+          , "discards" .= getDiscards player
+          ]
 
 
 -- XXX: quickcheck these are inverse of each other
