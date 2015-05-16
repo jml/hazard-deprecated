@@ -24,11 +24,13 @@ module Hazard ( Hazard
               ) where
 
 
+import Prelude hiding (round)
+
 import Control.Monad (mzero)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Random (evalRandIO)
 import Control.Monad.STM (STM, atomically)
-import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar)
+import Control.Concurrent.STM (TVar, newTVar, modifyTVar, readTVar, writeTVar)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 import qualified Data.ByteString as B
@@ -41,13 +43,20 @@ import Network.Wai.Middleware.HttpAuth
 import Web.Spock.Safe
 
 
+import Haverer.Round (Round)
+
+
 import Hazard.HttpAuth (maybeLoggedIn)
 
+import qualified Hazard.Model as Model
 import Hazard.Model (
   createGame,
   GameCreationRequest(..),
   GameSlot,
+  JoinError(..),
+  joinGame,
   requestGame,
+  roundToJSON,
   Validated(Unchecked),
   validateCreationRequest)
 
@@ -86,12 +95,17 @@ getGames :: Hazard -> STM [GameSlot Int]
 getGames = readTVar . games
 
 
-getGame :: Hazard -> Int -> STM (Maybe (GameSlot Int))
-getGame hazard i = do
+getGameSlot :: Hazard -> Int -> STM (Maybe (GameSlot Int))
+getGameSlot hazard i = do
   games' <- readTVar (games hazard)
   if 0 <= i && i < length games'
     then return $ Just (games' !! i)
     else return Nothing
+
+
+getRound :: Hazard -> Int -> Int -> STM (Maybe (Round Int))
+getRound hazard i j =
+  (fmap . (=<<)) (flip Model.getRound j . Model.gameState) (getGameSlot hazard i)
 
 
 addGame :: Hazard -> GameSlot Int -> STM ()
@@ -99,6 +113,12 @@ addGame hazard game = do
   let allGames = games hazard
   games' <- readTVar allGames
   writeTVar allGames (games' ++ [game])
+
+
+setGame :: Hazard -> Int -> GameSlot Int -> STM ()
+setGame hazard i game =
+  modifyTVar (games hazard) $
+    \games' -> take i games' ++ [game] ++ drop (i+1) games'
 
 
 errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()
@@ -150,6 +170,7 @@ userWeb userDB pwgen = do
   where isProtected req = return $ case (requestMethod req, pathInfo req) of
           (_, "user":_) -> True
           ("POST", "games":_) -> True
+          ("POST", "game":_) -> True
           _ -> False
 
 
@@ -183,9 +204,11 @@ hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword)
 hazardWeb' :: MonadIO m => Hazard -> IO B.ByteString -> SpockT m ()
 hazardWeb' hazard pwgen = do
   get "/" $ html "Hello World!"
+
   get "/games" $ do
     games' <- liftIO $ atomically $ getGames hazard
     json ["/game/" ++ show i | i <- [0..length games' - 1]]
+
   post "/games" $ do
     creator <- loggedInUser (users hazard)
     gameRequest <- expectJSON
@@ -197,8 +220,33 @@ hazardWeb' hazard pwgen = do
        setStatus created201
        setHeader "Location" "/game/0"
        json (Nothing :: Maybe Int)
+
   get ("game" <//> var) $ \gameId -> do
-    game <- liftIO $ atomically $ getGame hazard gameId
-    json game
+    game <- liftIO $ atomically $ getGameSlot hazard gameId
+    case game of
+     Just game' -> json game'
+     Nothing -> errorMessage notFound404 ("no such game" :: Text)
+
+  post ("game" <//> var) $ \gameId -> do
+    joiner <- loggedInUser (users hazard)
+    game <- liftIO $ atomically $ getGameSlot hazard gameId
+    case game of
+     Nothing -> errorMessage notFound404 ("no such game" :: Text)
+     Just game' ->
+       case joinGame game' joiner of
+        Left AlreadyJoined -> json game'
+        Left AlreadyStarted -> badRequest ("Game already started" :: Text)
+        Right r -> do
+          game'' <- liftIO $ evalRandIO r
+          liftIO $ atomically $ setGame hazard gameId game''
+          json game''
+
+  get ("game" <//> var <//> "round" <//> var) $ \gameId roundId -> do
+    viewer <- maybeLoggedInUser (users hazard)
+    round <- liftIO $ atomically $ getRound hazard gameId roundId
+    case round of
+     Nothing -> errorMessage notFound404 ("no such round" :: Text)
+     Just round' -> json (roundToJSON viewer round')
+
 
   userWeb (users hazard) pwgen

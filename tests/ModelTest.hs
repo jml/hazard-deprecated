@@ -18,8 +18,15 @@
 
 module ModelTest (suite) where
 
+import Control.Monad.Random (evalRand)
+import Data.Aeson
+import Data.Aeson.Types (parseEither)
+import System.Random (mkStdGen)
+
 import Test.Tasty
 import Test.Tasty.QuickCheck
+
+import Haverer.Deck (Card(..))
 
 import Hazard.Model (GameCreationRequest(..),
                      GameSlot,
@@ -56,6 +63,19 @@ instance (Arbitrary a, Ord a, Show a) => Arbitrary (GameSlot a) where
     addPlayers extraPlayers game
 
 
+instance Arbitrary Card where
+
+  arbitrary = elements [ Soldier
+                       , Clown
+                       , Knight
+                       , Priestess
+                       , Wizard
+                       , General
+                       , Minister
+                       , Prince
+                       ]
+
+
 initialGame :: Arbitrary a => Gen (GameSlot a)
 initialGame = createGame <$> arbitrary <*> arbitrary
 
@@ -68,7 +88,7 @@ addPlayers n g =
       p <- arbitrary `suchThat` (`notElem` players g')
       case joinGame g' p of
        Left e -> error $ show e
-       Right r -> return r
+       Right r -> return (evalRand r (mkStdGen 42))
 
 
 prop_creatorInPlayers :: Eq a => GameSlot a -> Bool
@@ -80,6 +100,14 @@ prop_numPlayersVsActualPlayers g =
   case gameState g of
    Pending {} -> length (players g) < numPlayers g
    InProgress {} -> length (players g) <= numPlayers g
+
+
+prop_jsonEquivalent :: (FromJSON a, ToJSON a, Eq a) => a -> Bool
+prop_jsonEquivalent value =
+  let jsonVersion = toJSON value in
+  case parseEither parseJSON jsonVersion of
+   Left e -> error e
+   Right value' -> value == value'
 
 
 suite :: TestTree
@@ -99,5 +127,8 @@ suite = testGroup "Hazard.Model" [
     \x -> prop_creatorInPlayers (x :: GameSlot Int)
   , testProperty "numPlayers greater than or equal to number of players" $
     \x -> prop_numPlayersVsActualPlayers (x :: GameSlot Int)
+  ],
+  testGroup "JSON parsing"
+  [ testProperty "Card" $ \x -> prop_jsonEquivalent (x :: Card)
   ]
   ]

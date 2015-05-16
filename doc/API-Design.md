@@ -95,13 +95,13 @@ HTTP/1.1 200 OK
 
 `GET /game/<id> HTTP/1.1`
 
+* Date created
+* Who created it
 * Are we still waiting for people?
 * Who's playing?
 * What are the scores?
 * Who won?
 * Where's the current round?
-* Date created
-* Who created it
 
 ## Changing the game
 

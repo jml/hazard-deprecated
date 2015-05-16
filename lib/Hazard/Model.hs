@@ -16,29 +16,43 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Hazard.Model ( GameCreationError(..)
                     , GameCreationRequest(reqNumPlayers, reqTurnTimeout)
                     , GameSlot
                     , Game(Pending, InProgress)
+                    , JoinError(..)
                     , Seconds
                     , Validated(..)
                     , creator
                     , createGame
                     , gameState
+                    , getRound
                     , joinGame
                     , numPlayers
                     , players
                     , requestGame
+                    , roundToJSON
                     , turnTimeout
                     , validateCreationRequest
                     ) where
 
+import Prelude hiding (round)
 
-import Data.Aeson (ToJSON(..), object, (.=))
+import Control.Monad (MonadPlus, guard, mzero)
+import Control.Monad.Random (MonadRandom)
+import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), Value(..))
+import qualified Data.Map as Map
+import Data.Maybe (isJust)
+import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Haverer.Game as H
-import Haverer.Player (toPlayers, toPlayerSet)
+
+
+import Haverer.Deck (Card(..))
+import Haverer.Player (Player, getDiscards, getHand, isProtected, toPlayers, toPlayerSet)
+import Haverer.Round (currentPlayer, currentTurn, getPlayerMap, Round)
 
 
 type Seconds = Int
@@ -80,19 +94,88 @@ data GameSlot a = GameSlot {
 data Game a = Pending { _numPlayers :: Int
                       , _players :: [a]
                       }
-            | InProgress { game :: H.Game a }
+            | InProgress { game :: H.Game a
+                         , rounds :: [Round a]
+                         }
             deriving (Show)
 
 
 instance ToJSON a => ToJSON (GameSlot a) where
   toJSON slot =
-    case gameState slot of
-     Pending {} -> object [ "turnTimeout" .= turnTimeout slot
-                          , "creator" .= creator slot
-                          , "state" .= ("pending" :: Text)
-                          , "numPlayers" .= numPlayers slot
-                          , "players" .= players slot
+    object (specificFields ++ commonFields)
+    where
+      specificFields =
+        case gameState slot of
+         Pending {} -> ["state" .= ("pending" :: Text)]
+         InProgress {} -> [ "state" .= ("in-progress" :: Text)
+                          , "scores" .= replicate (length (players slot)) (0 :: Int)
                           ]
+      commonFields = [ "turnTimeout" .= turnTimeout slot
+                     , "creator" .= creator slot
+                     , "numPlayers" .= numPlayers slot
+                     , "players" .= players slot
+                     ]
+
+
+instance (Ord a, ToJSON a) => ToJSON (Round a) where
+  toJSON = roundToJSON Nothing
+
+
+roundToJSON :: (Ord a, ToJSON a) => Maybe a -> Round a -> Value
+roundToJSON someone round =
+  object $ [ "players" .= (map playerToJSON' .  Map.assocs . getPlayerMap) round
+           , "currentPlayer" .= currentPlayer round
+           ] ++ (("dealtCard" .=) <$> justZ (getDealt someone round))
+  where playerToJSON' = uncurry (playerToJSON someone)
+
+
+getDealt :: (MonadPlus m, Ord a) => m a -> Round a -> m Card
+getDealt someone round = do
+  (pid, (dealt, _)) <- justZ (currentTurn round)
+  viewer <- someone
+  guard (viewer == pid)
+  return dealt
+
+
+-- XXX: Delete this when we add 'errors'
+justZ :: MonadPlus m => Maybe a -> m a
+justZ = maybe mzero return
+
+
+playerToJSON :: (Eq a, ToJSON a) => Maybe a -> a -> Player -> Value
+playerToJSON someone pid player =
+  case someone of
+   Nothing -> object commonFields
+   Just viewer
+     | viewer == pid -> object $ ("hand" .= getHand player):commonFields
+     | otherwise -> playerToJSON Nothing pid player
+  where commonFields =
+          [ "id" .= pid
+          , "active" .= (isJust . getHand) player
+          , "protected" .= isProtected player
+          , "discards" .= getDiscards player
+          ]
+
+
+instance ToJSON Card where
+
+  toJSON = toJSON . show
+
+
+instance FromJSON Card where
+
+  parseJSON (String s) =
+    case Text.toLower s of
+     "soldier"   -> return Soldier
+     "clown"     -> return Clown
+     "knight"    -> return Knight
+     "priestess" -> return Priestess
+     "wizard"    -> return Wizard
+     "general"   -> return General
+     "minister"  -> return Minister
+     "prince"    -> return Prince
+     _ -> mzero
+  parseJSON _ = mzero
 
 
 createGame :: a -> GameCreationRequest 'Valid -> GameSlot a
@@ -118,21 +201,32 @@ players =
         players' (InProgress { game = game }) = (toPlayers . H.players) game
 
 
+getRound :: Game a -> Int -> Maybe (Round a)
+getRound InProgress { rounds = rounds } i
+  | 0 <= i && i < length rounds = Just $ rounds !! i
+  | otherwise = Nothing
+getRound _ _ = Nothing
+
+
 data JoinError = AlreadyStarted | AlreadyJoined deriving (Eq, Show)
 
-joinGame :: (Show a, Ord a) => GameSlot a -> a -> Either JoinError (GameSlot a)
+joinGame :: (MonadRandom m, Show a, Ord a) => GameSlot a -> a -> Either JoinError (m (GameSlot a))
 joinGame slot p = do
   newState <- joinGame' (gameState slot) p
-  return $ slot { gameState = newState }
+  return $ do
+    newState' <- newState
+    return $ slot { gameState = newState' }
 
 
-joinGame' :: (Show a, Ord a) => Game a -> a -> Either JoinError (Game a)
+joinGame' :: (Show a, Ord a, MonadRandom m) => Game a -> a -> Either JoinError (m (Game a))
 joinGame' (InProgress {}) _ = Left AlreadyStarted
 joinGame' (Pending {..}) p
   | p `elem` _players = Left AlreadyJoined
-  | numNewPlayers == _numPlayers = Right $ InProgress newGame
-  | otherwise = Right Pending { _numPlayers = _numPlayers
-                              , _players = newPlayers }
+  | numNewPlayers == _numPlayers = Right $ do
+      round <- H.newRound newGame
+      return $ InProgress newGame (pure round)
+  | otherwise = Right $ return Pending { _numPlayers = _numPlayers
+                                       , _players = newPlayers }
   where newPlayers = p:_players
         numNewPlayers = length newPlayers
         newGame = case toPlayerSet newPlayers of
