@@ -40,7 +40,7 @@ module Hazard.Model ( GameCreationError(..)
 
 import Prelude hiding (round)
 
-import Control.Monad (mzero)
+import Control.Monad (MonadPlus, guard, mzero)
 import Control.Monad.Random (MonadRandom)
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), Value(..))
 import qualified Data.Map as Map
@@ -52,7 +52,7 @@ import qualified Haverer.Game as H
 
 import Haverer.Deck (Card(..))
 import Haverer.Player (Player, getDiscards, getHand, isProtected, toPlayers, toPlayerSet)
-import Haverer.Round (currentPlayer, getPlayerMap, Round)
+import Haverer.Round (currentPlayer, currentTurn, getPlayerMap, Round)
 
 
 type Seconds = Int
@@ -117,15 +117,29 @@ instance ToJSON a => ToJSON (GameSlot a) where
                      ]
 
 
-instance (Eq a, ToJSON a) => ToJSON (Round a) where
+instance (Ord a, ToJSON a) => ToJSON (Round a) where
   toJSON = roundToJSON Nothing
 
 
-roundToJSON :: (Eq a, ToJSON a) => Maybe a -> Round a -> Value
+roundToJSON :: (Ord a, ToJSON a) => Maybe a -> Round a -> Value
 roundToJSON someone round =
-  object [ "players" .= (map (uncurry (playerToJSON someone)) .  Map.assocs . getPlayerMap) round
-         , "currentPlayer" .= currentPlayer round
-         ]
+  object $ [ "players" .= (map playerToJSON' .  Map.assocs . getPlayerMap) round
+           , "currentPlayer" .= currentPlayer round
+           ] ++ (("dealtCard" .=) <$> justZ (getDealt someone round))
+  where playerToJSON' = uncurry (playerToJSON someone)
+
+
+getDealt :: (MonadPlus m, Ord a) => m a -> Round a -> m Card
+getDealt someone round = do
+  (pid, (dealt, _)) <- justZ (currentTurn round)
+  viewer <- someone
+  guard (viewer == pid)
+  return dealt
+
+
+-- XXX: Delete this when we add 'errors'
+justZ :: MonadPlus m => Maybe a -> m a
+justZ = maybe mzero return
 
 
 playerToJSON :: (Eq a, ToJSON a) => Maybe a -> a -> Player -> Value

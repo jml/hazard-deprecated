@@ -17,9 +17,9 @@
 
 module GameTest (suite) where
 
-import Control.Monad (unless)
+import Control.Monad (unless, (>=>))
 import Data.Aeson hiding (json)
-import Data.Aeson.Types (Parser, parseMaybe)
+import Data.Aeson.Types (parseMaybe)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as L
 import Data.Foldable (for_)
@@ -165,13 +165,23 @@ spec = with hazardTestApp $ do
     it "Shows your hand when you GET" $ do
       (game, [_, bar, _]) <- makeStartedGame 3
       response <- getAs (encodeUtf8 bar) (B.concat [game, "/round/0"])
-      jsonResponseIs response (isJust . getJsonHand 1) True
+      jsonResponseIs response (isJust . (getPlayer 1 >=> getCard "hand")) True
 
     it "Doesn't show other hands when you GET" $ do
       (game, [_, bar, _]) <- makeStartedGame 3
       response <- getAs (encodeUtf8 bar) (B.concat [game, "/round/0"])
-      jsonResponseIs response (isJust . getJsonHand 0) False
-      jsonResponseIs response (isJust . getJsonHand 2) False
+      jsonResponseIs response (getPlayer 0 >=> getKey "hand") (Nothing :: Maybe Card)
+      jsonResponseIs response (getPlayer 2 >=> getKey "hand") (Nothing :: Maybe Card)
+
+    it "Doesn't include dealt card when it's not your turn" $ do
+      (game, [_, bar, _]) <- makeStartedGame 3
+      response <- getAs (encodeUtf8 bar) (B.concat [game, "/round/0"])
+      jsonResponseIs response (getKey "dealtCard") (Nothing :: Maybe Card)
+
+    it "Does include dealt card when it is your turn" $ do
+      (game, [_, _, baz]) <- makeStartedGame 3
+      response <- getAs (encodeUtf8 baz) (B.concat [game, "/round/0"])
+      jsonResponseIs response (isJust . getCard "dealtCard") True
 
   where
     makeGameAs :: Text -> Int -> WaiSession B.ByteString
@@ -195,11 +205,13 @@ spec = with hazardTestApp $ do
                               postAs (encodeUtf8 u) game [json|null|] `shouldRespondWith` 200)
         return (game, users)
 
-    getJsonHand :: Int -> Value -> Maybe Card
-    getJsonHand i = parseMaybe (withObject "expected round object" (
-                                   \obj -> do players <- obj .: "players"
-                                              (players !! i) .: "hand"))
+    getPlayer i v = getKey "players" v >>= \ps -> ps !! i
 
+    getKey :: FromJSON a => Text -> Value -> Maybe a
+    getKey key = parseMaybe (withObject "expected object" (.: key))
+
+    getCard :: Text -> Value -> Maybe Card
+    getCard = getKey
 
     jsonResponseIs :: (FromJSON a, Eq b, Show b) => SResponse -> (a -> b) -> b -> WaiSession ()
     jsonResponseIs response f value =
