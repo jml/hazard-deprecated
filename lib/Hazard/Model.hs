@@ -16,6 +16,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Hazard.Model ( GameCreationError(..)
                     , GameCreationRequest(reqNumPlayers, reqTurnTimeout)
@@ -101,20 +102,19 @@ data Game a = Pending { _numPlayers :: Int
 
 instance ToJSON a => ToJSON (GameSlot a) where
   toJSON slot =
-    case gameState slot of
-     Pending {} -> object [ "turnTimeout" .= turnTimeout slot
-                          , "creator" .= creator slot
-                          , "state" .= ("pending" :: Text)
-                          , "numPlayers" .= numPlayers slot
-                          , "players" .= players slot
+    object (specificFields ++ commonFields)
+    where
+      specificFields =
+        case gameState slot of
+         Pending {} -> ["state" .= ("pending" :: Text)]
+         InProgress {} -> [ "state" .= ("in-progress" :: Text)
+                          , "scores" .= replicate (length (players slot)) (0 :: Int)
                           ]
-     InProgress {} -> object [ "turnTimeout" .= turnTimeout slot
-                             , "creator" .= creator slot
-                             , "state" .= ("in-progress" :: Text)
-                             , "numPlayers" .= numPlayers slot
-                             , "players" .= players slot
-                             , "scores" .= replicate (length (players slot)) (0 :: Int)
-                             ]
+      commonFields = [ "turnTimeout" .= turnTimeout slot
+                     , "creator" .= creator slot
+                     , "numPlayers" .= numPlayers slot
+                     , "players" .= players slot
+                     ]
 
 
 instance (Eq a, ToJSON a) => ToJSON (Round a) where
@@ -142,8 +142,6 @@ playerToJSON someone pid player =
           , "discards" .= getDiscards player
           ]
 
-
--- XXX: quickcheck these are inverse of each other
 
 instance ToJSON Card where
 
