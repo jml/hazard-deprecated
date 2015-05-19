@@ -12,9 +12,12 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main where
+
+import BasicPrelude
 
 import Control.Concurrent.STM (atomically)
 import Web.Spock.Safe

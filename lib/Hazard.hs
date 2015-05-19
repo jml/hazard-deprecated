@@ -15,6 +15,7 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Hazard ( Hazard
@@ -24,25 +25,20 @@ module Hazard ( Hazard
               ) where
 
 
-import Prelude hiding (round)
+import BasicPrelude hiding (round)
 
-import Control.Monad (mzero)
-import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Random (evalRandIO)
 import Control.Monad.STM (STM, atomically)
 import Control.Concurrent.STM (TVar, newTVar, modifyTVar, readTVar, writeTVar)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
-import qualified Data.ByteString as B
-import Data.Maybe (isJust)
-import Data.Text (Text, append, pack)
-import Data.Text.Encoding (decodeUtf8)
 import Network.HTTP.Types.Status
 import Network.Wai (requestMethod, pathInfo)
 import Network.Wai.Middleware.HttpAuth
 import Web.Spock.Safe
 
 
+import Haverer.Internal.Error
 import Haverer.Round (Round)
 
 
@@ -141,7 +137,7 @@ expectJSON = do
    Just contents -> return contents
 
 
-userWeb :: MonadIO m => UserDB -> IO B.ByteString -> SpockT m ()
+userWeb :: MonadIO m => UserDB -> IO ByteString -> SpockT m ()
 userWeb userDB pwgen = do
 
   middleware $ basicAuth (authUserDB userDB) ("Hazard API" { authIsProtected = isProtected })
@@ -157,7 +153,7 @@ userWeb userDB pwgen = do
     case newID of
      Just newID' -> do
        setStatus created201
-       setHeader "Location" (append "/user/" (pack (show newID')))
+       setHeader "Location" ("/user/" ++ show newID')
        json (object ["password" .= decodeUtf8 password])
      Nothing -> badRequest ("username already exists" :: Text)
 
@@ -203,7 +199,7 @@ hazardWeb :: MonadIO m => Hazard -> SpockT m ()
 hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword)
 
 
-hazardWeb' :: MonadIO m => Hazard -> IO B.ByteString -> SpockT m ()
+hazardWeb' :: MonadIO m => Hazard -> IO ByteString -> SpockT m ()
 hazardWeb' hazard pwgen = do
   get "/" $ html "Hello World!"
 
@@ -215,7 +211,7 @@ hazardWeb' hazard pwgen = do
     creator <- loggedInUser (users hazard)
     gameRequest <- expectJSON
     case validateCreationRequest gameRequest of
-     Left e -> error $ show e  -- XXX: Should be bad request
+     Left e -> terror $ show e  -- XXX: Should be bad request
      Right r -> do
        let newGame = createGame creator r
        liftIO $ atomically $ addGame hazard newGame

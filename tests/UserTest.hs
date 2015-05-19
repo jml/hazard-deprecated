@@ -12,13 +12,14 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
 
 module UserTest (suite) where
 
+import BasicPrelude
 
 import Test.Hspec.Wai
 import Test.Hspec.Wai.JSON

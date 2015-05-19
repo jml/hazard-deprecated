@@ -14,9 +14,12 @@
 
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module ModelTest (suite) where
+
+import BasicPrelude
 
 import Control.Monad.Random (evalRand)
 import Data.Aeson
@@ -26,6 +29,7 @@ import System.Random (mkStdGen)
 import Test.Tasty
 import Test.Tasty.QuickCheck
 
+import Haverer.Internal.Error
 import Haverer.Deck (Card(..))
 
 import Hazard.Model (GameCreationRequest(..),
@@ -51,7 +55,7 @@ instance Arbitrary (GameCreationRequest 'Valid) where
   arbitrary = do
     uncheckedRequest <- requestGame <$> choose (2, 4) <*> (getPositive <$> arbitrary)
     case validateCreationRequest uncheckedRequest of
-     Left e -> error $ show e
+     Left e -> terror $ show e
      Right r -> return r
 
 
@@ -87,7 +91,7 @@ addPlayers n g =
     addPlayer g' = do
       p <- arbitrary `suchThat` (`notElem` players g')
       case joinGame g' p of
-       Left e -> error $ show e
+       Left e -> terror $ show e
        Right r -> return (evalRand r (mkStdGen 42))
 
 
