@@ -12,27 +12,19 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Hazard.HttpAuth (maybeLoggedIn) where
 
-import Control.Monad.IO.Class (MonadIO)
-import qualified Data.ByteString as B
+import BasicPrelude
+
 import Network.Wai (Request, requestHeaders)
 import Network.Wai.Middleware.HttpAuth
-import Web.Spock.Safe
 
 
-maybeLoggedIn :: Request -> Maybe B.ByteString
+maybeLoggedIn :: Request -> Maybe ByteString
 maybeLoggedIn req = do
   authHeader <- lookup "Authorization" $ requestHeaders req
   (u, _) <- extractBasicAuth authHeader
   return u
-
-
-getLoggedIn :: MonadIO m => ActionT m B.ByteString
-getLoggedIn = do
-  req <- request
-  case maybeLoggedIn req of
-   Nothing -> error "Should be logged in, but not"
-   Just u -> return u

@@ -1,3 +1,4 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Hazard.Users ( UserDB
@@ -10,15 +11,11 @@ module Hazard.Users ( UserDB
                     , usernames
                     ) where
 
+import BasicPrelude
 import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar)
-import Control.Monad (mzero, replicateM)
 import Control.Monad.STM (STM)
 import Control.Monad.Random (Rand, uniform)
 import qualified Data.ByteString as B
-import Data.Foldable (find)
-import Data.List (findIndex)
-import Data.Text (Text)
-import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import System.Random (RandomGen)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
@@ -26,7 +23,7 @@ import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 
 -- XXX: Stored as username / password. Password is in the clear, which is
 -- terrible.
-data User = User B.ByteString B.ByteString
+data User = User ByteString ByteString
 
 instance ToJSON User where
   toJSON (User u _) = object ["username" .= decodeUtf8 u]
@@ -49,7 +46,7 @@ newtype UserDB = UserDB { unUserDB :: TVar [User] }
 makeUserDB :: STM UserDB
 makeUserDB = UserDB <$> newTVar []
 
-usernames :: UserDB -> STM [B.ByteString]
+usernames :: UserDB -> STM [ByteString]
 usernames = fmap (map username) . readTVar . unUserDB
             where username (User u _) = u
 
@@ -60,20 +57,20 @@ getUserByID userDB i = do
   return $ if 0 <= i && i < length allUsers then Just (allUsers !! i) else Nothing
 
 
-getUserByName :: UserDB -> B.ByteString -> STM (Maybe User)
+getUserByName :: UserDB -> ByteString -> STM (Maybe User)
 getUserByName userDB username = do
   allUsers <- readTVar (unUserDB userDB)
   return $ find (\(User u _) -> u == username) allUsers
 
 
-getUserIDByName :: UserDB -> B.ByteString -> STM (Maybe Int)
+getUserIDByName :: UserDB -> ByteString -> STM (Maybe Int)
 getUserIDByName userDB username = do
   allUsers <- readTVar (unUserDB userDB)
   return $ findIndex (\(User u _) -> u == username) allUsers
 
 
 
-authenticate :: UserDB -> B.ByteString -> B.ByteString -> STM (Maybe User)
+authenticate :: UserDB -> ByteString -> ByteString -> STM (Maybe User)
 authenticate userDB username password = do
   foundUser <- getUserByName userDB username
   return $ case foundUser of
@@ -83,7 +80,7 @@ authenticate userDB username password = do
      | otherwise -> Nothing
 
 
-addUser :: UserDB -> UserCreationRequest -> B.ByteString -> STM (Maybe Int)
+addUser :: UserDB -> UserCreationRequest -> ByteString -> STM (Maybe Int)
 addUser userDB req password =
   let username = encodeUtf8 (reqUsername req)
       newUser = User username password
@@ -97,7 +94,7 @@ addUser userDB req password =
       _ -> return Nothing
 
 
-makePassword :: RandomGen g => Rand g B.ByteString
+makePassword :: RandomGen g => Rand g ByteString
 makePassword = B.pack <$> replicateM passwordLength randomPasswordChar
   where passwordLength = 16
         randomPasswordChar = uniform passwordChars

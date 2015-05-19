@@ -12,21 +12,18 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
 module GameTest (suite) where
 
-import Control.Monad (unless, (>=>))
+import BasicPrelude
+
 import Data.Aeson hiding (json)
 import Data.Aeson.Types (parseMaybe)
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as L
 import Data.Foldable (for_)
-import Data.Maybe (isJust)
-import Data.Text (Text)
-import qualified Data.Text as Text
-import Data.Text.Encoding (decodeUtf8, encodeUtf8)
+import qualified Data.ByteString.Lazy as L
 
 import Network.Wai.Test (SResponse(..))
 import Test.Hspec.Wai
@@ -116,7 +113,7 @@ spec = with hazardTestApp $ do
   describe "Playing a game" $ do
     it "Rounds don't exist for unstarted game" $ do
       game <- makeGameAs "foo" 2
-      get (B.concat [game, "/round/0"]) `shouldRespondWith` 404
+      get (game ++ "/round/0") `shouldRespondWith` 404
 
     it "started game is started" $ do
       (game, _) <- makeStartedGame 3
@@ -135,7 +132,7 @@ spec = with hazardTestApp $ do
       -- that's a good thing or a bad thing, so I'm going to leave it as
       -- integers until we start implementing actual clients.
       (game, [foo, bar, baz]) <- makeStartedGame 3
-      get (B.concat [game, "/round/0"]) `hasJsonResponse`
+      get (game ++ "/round/0") `hasJsonResponse`
         object [
           "players" .= [
              object [
@@ -164,27 +161,27 @@ spec = with hazardTestApp $ do
 
     it "Shows your hand when you GET" $ do
       (game, [_, bar, _]) <- makeStartedGame 3
-      response <- getAs (encodeUtf8 bar) (B.concat [game, "/round/0"])
+      response <- getAs (encodeUtf8 bar) (game ++ "/round/0")
       jsonResponseIs response (isJust . (getPlayer 1 >=> getCard "hand")) True
 
     it "Doesn't show other hands when you GET" $ do
       (game, [_, bar, _]) <- makeStartedGame 3
-      response <- getAs (encodeUtf8 bar) (B.concat [game, "/round/0"])
+      response <- getAs (encodeUtf8 bar) (game ++ "/round/0")
       jsonResponseIs response (getPlayer 0 >=> getKey "hand") (Nothing :: Maybe Card)
       jsonResponseIs response (getPlayer 2 >=> getKey "hand") (Nothing :: Maybe Card)
 
     it "Doesn't include dealt card when it's not your turn" $ do
       (game, [_, bar, _]) <- makeStartedGame 3
-      response <- getAs (encodeUtf8 bar) (B.concat [game, "/round/0"])
+      response <- getAs (encodeUtf8 bar) (game ++ "/round/0")
       jsonResponseIs response (getKey "dealtCard") (Nothing :: Maybe Card)
 
     it "Does include dealt card when it is your turn" $ do
       (game, [_, _, baz]) <- makeStartedGame 3
-      response <- getAs (encodeUtf8 baz) (B.concat [game, "/round/0"])
+      response <- getAs (encodeUtf8 baz) (game ++ "/round/0")
       jsonResponseIs response (isJust . getCard "dealtCard") True
 
   where
-    makeGameAs :: Text -> Int -> WaiSession B.ByteString
+    makeGameAs :: Text -> Int -> WaiSession ByteString
     makeGameAs user numPlayers = do
       post "/users" (encode $ object ["username" .= (user :: Text)])
       response <- postAs (encodeUtf8 user) "/games" (encode $
@@ -194,7 +191,7 @@ spec = with hazardTestApp $ do
        Just path -> return path
        Nothing -> error "Did not create game: could not find return header"
 
-    makeStartedGame :: Int -> WaiSession (B.ByteString, [Text])
+    makeStartedGame :: Int -> WaiSession (ByteString, [Text])
     makeStartedGame n =
       let userPool = ["foo", "bar", "baz", "qux"]
           users = take n userPool
@@ -216,7 +213,7 @@ spec = with hazardTestApp $ do
     jsonResponseIs :: (FromJSON a, Eq b, Show b) => SResponse -> (a -> b) -> b -> WaiSession ()
     jsonResponseIs response f value =
       unless ((f <$> decode body) == Just value)
-        (liftIO $ expectationFailure $ unlines [
+        (liftIO $ expectationFailure $ textToString $ unlines [
             "Expected: " ++ show value,
             "Actual: " ++ lazyToString body
             ])
@@ -229,8 +226,8 @@ spec = with hazardTestApp $ do
 
 
 -- XXX: Is there an easier way?
-lazyToString :: L.ByteString -> String
-lazyToString = Text.unpack . decodeUtf8 . L.toStrict
+lazyToString :: LByteString -> Text
+lazyToString = decodeUtf8 . L.toStrict
 
 
 suite :: IO TestTree

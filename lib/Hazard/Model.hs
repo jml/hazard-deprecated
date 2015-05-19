@@ -14,6 +14,7 @@
 
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -38,18 +39,15 @@ module Hazard.Model ( GameCreationError(..)
                     , validateCreationRequest
                     ) where
 
-import Prelude hiding (round)
+import BasicPrelude hiding (round)
 
-import Control.Monad (MonadPlus, guard, mzero)
 import Control.Monad.Random (MonadRandom)
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), Value(..))
 import qualified Data.Map as Map
-import Data.Maybe (isJust)
 import qualified Data.Text as Text
-import Data.Text (Text)
+
 import qualified Haverer.Game as H
-
-
+import Haverer.Internal.Error
 import Haverer.Deck (Card(..))
 import Haverer.Player (Player, getDiscards, getHand, isProtected, toPlayers, toPlayerSet)
 import Haverer.Round (currentPlayer, currentTurn, getPlayerMap, Round)
@@ -230,5 +228,5 @@ joinGame' (Pending {..}) p
   where newPlayers = p:_players
         numNewPlayers = length newPlayers
         newGame = case toPlayerSet newPlayers of
-                   Left e -> error $ "Couldn't make game: " ++ show e
+                   Left e -> terror $ "Couldn't make game: " ++ show e
                    Right r -> H.makeGame r
