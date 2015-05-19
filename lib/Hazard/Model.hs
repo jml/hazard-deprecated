@@ -27,11 +27,14 @@ module Hazard.Model ( GameCreationError(..)
                     , Validated(..)
                     , creator
                     , createGame
+                    , currentPlayer
                     , gameState
                     , getRound
+                    , getPlayers
                     , joinGame
                     , numPlayers
                     , players
+                    , playTurn
                     , requestGame
                     , roundToJSON
                     , turnTimeout
@@ -42,7 +45,7 @@ import Prelude hiding (round)
 
 import Control.Monad (MonadPlus, guard, mzero)
 import Control.Monad.Random (MonadRandom)
-import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), Value(..))
+import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..))
 import qualified Data.Map as Map
 import Data.Maybe (isJust)
 import qualified Data.Text as Text
@@ -50,9 +53,11 @@ import Data.Text (Text)
 import qualified Haverer.Game as H
 
 
+import Haverer.Action (Play(..), viewAction)
 import Haverer.Deck (Card(..))
 import Haverer.Player (Player, getDiscards, getHand, isProtected, toPlayers, toPlayerSet)
-import Haverer.Round (currentPlayer, currentTurn, getPlayerMap, Round)
+import qualified Haverer.Round as Round
+import Haverer.Round (currentPlayer, currentTurn, getPlayers, getPlayerMap, Round, Event(..))
 
 
 type Seconds = Int
@@ -83,6 +88,28 @@ validateCreationRequest (GameCreationRequest { .. })
   | reqNumPlayers > 4 = Left $ InvalidNumberOfPlayers reqNumPlayers
   | otherwise = Right $ GameCreationRequest reqNumPlayers reqTurnTimeout
 
+
+data PlayRequest a = PlayRequest Card (Play a) deriving (Eq, Show)
+
+
+instance FromJSON a => FromJSON (PlayRequest a) where
+  parseJSON (Object v) = do
+    -- XXX: Find out how to do this all in one line into a tuple using
+    -- applicative functor
+    card <- v .: "card"
+    target <- v .:? "target"
+    guess <- v .:? "guess"
+    case (target, guess) of
+     (Nothing, Nothing) -> return $ PlayRequest card NoEffect
+     (Just player, Nothing) -> return $ PlayRequest card (Attack player)
+     (Just player, Just guess') -> return $ PlayRequest card (Guess player guess')
+     _ -> mzero
+  parseJSON _ = mzero
+
+
+-- XXX: I'm ambivalent about having GameSlot & Game. The idea is that the
+-- fields in GameSlot are all metadata, and entirely irrelevant to the "rules"
+-- bit in gameState.
 
 data GameSlot a = GameSlot {
   turnTimeout :: Seconds,
@@ -162,6 +189,39 @@ instance ToJSON Card where
   toJSON = toJSON . show
 
 
+instance ToJSON a => ToJSON (Round.Result a) where
+
+  toJSON (Round.BustedOut playerId dealt hand) =
+    object [ "result" .= ("busted" :: Text)
+           , "id" .= playerId
+           , "dealt" .= dealt
+           , "hand" .= hand
+           ]
+  toJSON (Round.Played action event) =
+    object $ [ "result" .= ("played" :: Text) ] ++ actions ++ events
+    where
+      actions =
+        let (pid, card, play) = viewAction action in
+         [ "id" .= pid, "card" .= card ] ++
+         case play of
+          NoEffect -> []
+          Attack target -> ["target" .= target]
+          Guess target guess -> ["target" .= target, "guess" .= guess]
+      events = case event of
+                NoChange -> [ "result" .= ("no-change" :: Text) ]
+                Protected pid -> [ "result" .= ("protected" :: Text)
+                                 , "protected" .= pid
+                                 ]
+                SwappedHands tgt src -> [ "result" .= ("swapped-hands" :: Text)
+                                        , "swapped-hands" .= [src, tgt]
+                                        ]
+                Eliminated pid -> [ "result" .= ("eliminated" :: Text)
+                                  , "eliminated" .= pid ]
+                ForcedDiscard {} -> [ "result" .= ("forced-discard" :: Text) ]
+                ForcedReveal src tgt _ -> [ "result" .= ("forced-reveal" :: Text)
+                                          , "forced-reveal" .= [src, tgt]
+                                          ]
+
 instance FromJSON Card where
 
   parseJSON (String s) =
@@ -232,3 +292,37 @@ joinGame' (Pending {..}) p
         newGame = case toPlayerSet newPlayers of
                    Left e -> error $ "Couldn't make game: " ++ show e
                    Right r -> H.makeGame r
+
+
+data PlayError a = NotStarted | PlayNotSpecified | BadAction (Round.BadAction a) deriving Show
+
+
+playTurn :: (Ord a, Show a) => GameSlot a -> Maybe (PlayRequest a) -> Either (PlayError a) (GameSlot a, Round.Result a)
+playTurn slot r = do
+  (newState, result) <- playTurn' (gameState slot) r
+  return (slot { gameState = newState }, result)
+
+
+playTurn' :: (Ord a, Show a) => Game a -> Maybe (PlayRequest a) -> Either (PlayError a) (Game a, Round.Result a)
+playTurn' (Pending {}) _ = Left NotStarted
+playTurn' (InProgress {..}) playRequest =
+  let round = head rounds in
+  do
+    (round', result) <- playTurn'' round playRequest
+    case result of
+     Round.RoundOver -> error "Round over: need to make a new one (TYPES! RANDOMNESS!) unless whole game is over"
+     _ -> return (InProgress { game = game, rounds = round':tail rounds }, result)
+
+
+playTurn'' :: (Ord a, Show a) => Round a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round a, Round.Result a)
+playTurn'' round playRequest =
+  -- XXX: This is duplicating Haverer.Engine.getPlay a fair bit.
+  case Round.playTurn round of
+   Left busted -> return busted
+   Right handlePlay ->
+     case playRequest of
+      Nothing -> Left PlayNotSpecified
+      Just (PlayRequest card play) ->
+        case handlePlay card play of
+         Left err -> Left (BadAction err)
+         Right result -> return result

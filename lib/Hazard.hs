@@ -168,6 +168,8 @@ userWeb userDB pwgen = do
      Nothing -> errorMessage notFound404 ("no such user" :: Text)
 
   where isProtected req = return $ case (requestMethod req, pathInfo req) of
+          -- XXX: Alter this to be default POST requires auth, except
+          -- registering users, and all others don't need auth
           (_, "user":_) -> True
           ("POST", "games":_) -> True
           ("POST", "game":_) -> True
@@ -229,6 +231,9 @@ hazardWeb' hazard pwgen = do
 
   post ("game" <//> var) $ \gameId -> do
     joiner <- loggedInUser (users hazard)
+    -- XXX: Here and elsewhere, our concurrency model is completely wrong,
+    -- since the game (or round, or whatever) can be modified between the
+    -- first 'atomically' and the second 'atomically'.
     game <- liftIO $ atomically $ getGameSlot hazard gameId
     case game of
      Nothing -> errorMessage notFound404 ("no such game" :: Text)
@@ -247,6 +252,33 @@ hazardWeb' hazard pwgen = do
     case round of
      Nothing -> errorMessage notFound404 ("no such round" :: Text)
      Just round' -> json (roundToJSON viewer round')
+
+  post ("game" <//> var <//> "round" <//> var) $ \gameId roundId -> do
+    poster <- loggedInUser (users hazard)
+    round <- liftIO $ atomically $ getRound hazard gameId roundId
+    case round of
+     Nothing -> errorMessage notFound404 ("no such round" :: Text)
+     Just round'
+       | poster `notElem` Model.getPlayers round' ->
+           do setStatus badRequest400
+              json (object ["message" .= ("You are not playing" :: Text)])
+       | Just poster /= Model.currentPlayer round' ->
+           do setStatus badRequest400
+              json (object ["message" .= ("Not your turn" :: Text),
+                            "currentPlayer" .= Model.currentPlayer round'])
+       | otherwise ->
+           do playRequest <- expectJSON
+              game <- liftIO $ atomically $ getGameSlot hazard gameId
+              case game of
+               Nothing -> error "Found round but not game. WTF?"
+               Just game' ->
+                 case Model.playTurn game' playRequest of
+                  Left e -> do
+                    setStatus badRequest400
+                    json (object ["message" .= show e])
+                  Right (game'', result) -> do
+                    liftIO $ atomically $ setGame hazard gameId game''
+                    json result
 
 
   userWeb (users hazard) pwgen
