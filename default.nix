@@ -1,6 +1,6 @@
 { mkDerivation, aeson, base, base64-bytestring, basic-prelude
-, bytestring, containers, haverer, hspec-wai, hspec-wai-json, http-types
-, MonadRandom, random, Spock, stdenv, stm, tasty, tasty-hspec
+, bytestring, containers, errors, haverer, hspec-wai, hspec-wai-json
+, http-types, MonadRandom, random, Spock, stdenv, stm, tasty, tasty-hspec
 , tasty-quickcheck, text, transformers, wai, wai-extra
 }:
 mkDerivation {
@@ -10,12 +10,12 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   buildDepends = [
-    aeson base basic-prelude bytestring containers haverer http-types
+    aeson base basic-prelude bytestring containers errors haverer http-types
     MonadRandom random Spock stm text transformers wai wai-extra
   ];
   testDepends = [
-    aeson base basic-prelude base64-bytestring bytestring haverer hspec-wai
-    hspec-wai-json http-types MonadRandom random Spock stm tasty
+    aeson base basic-prelude base64-bytestring bytestring errors haverer
+    hspec-wai hspec-wai-json http-types MonadRandom random Spock stm tasty
     tasty-hspec tasty-quickcheck text wai wai-extra
   ];
   description = "An HTTP API for playing Love Letter";

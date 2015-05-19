@@ -23,6 +23,7 @@ import BasicPrelude
 import Data.Aeson hiding (json)
 import Data.Aeson.Types (parseMaybe)
 import Data.Foldable (for_)
+import System.Random
 import qualified Data.ByteString.Lazy as L
 
 import Network.Wai.Test (SResponse(..))
@@ -31,9 +32,73 @@ import Test.Hspec.Wai.JSON
 import Test.Tasty
 import Test.Tasty.Hspec
 
+import Haverer.Action (Play(..))
+import qualified Haverer.Action as Action
 import Haverer.Deck (Card)
 
 import Utils (getAs, hazardTestApp, postAs, requiresAuth)
+
+
+-- XXX: All of this guff is so we can actually post a valid move once we've
+-- received a response. An alternative would be to pre-program the server to
+-- give predictable responses: i.e. rather than shuffling the deck, allow us
+-- to specify the order of cards.
+
+data PlayerState = PlayerState (Maybe Card) Int Bool Bool [Card] deriving (Eq, Show)
+
+instance FromJSON PlayerState where
+
+  parseJSON (Object v) = PlayerState <$> v .:? "hand"
+                                     <*> v .: "id"
+                                     <*> v .: "active"
+                                     <*> v .: "protected"
+                                     <*> v .: "discards"
+  parseJSON _ = mzero
+
+
+data RoundState = RoundState [PlayerState] Int (Maybe Card) deriving (Eq, Show)
+
+instance FromJSON RoundState where
+
+  parseJSON (Object v) = RoundState <$> v .: "players"
+                                    <*> v .: "currentPlayer"
+                                    <*> v .:? "dealtCard"
+
+
+getValidPlays :: RoundState -> [(Card, Action.Play Int)]
+getValidPlays (RoundState players i dealtCard) =
+  let (Just dealt) = dealtCard
+      (PlayerState handCard _ _ _ _) = players !! i
+      (Just hand) = handCard
+      playerIds = [ pid | (PlayerState _ pid _ _ _) <- players ]
+      in getValidPlays' i (playerIds \\ [i]) hand dealt
+
+
+-- XXX: Should be a public function in Haverer.
+-- XXX: Should be generalized to MonadPlus
+-- XXX: Find out if there's an implementation of MonadPlus where mplus is
+-- random.
+getValidPlays' :: a -> [a] -> Card -> Card -> [(Card, Action.Play a)]
+getValidPlays' self others dealt hand = do
+  guard $ not $ Action.bustingHand dealt hand
+  [(dealt, play) | play <- Action.getValidPlays self others dealt] ++
+    [(hand, play) | play <- Action.getValidPlays self others hand]
+
+
+choose :: [a] -> IO a
+choose xs = do
+  let n = length xs
+  i <- getStdRandom (randomR (1, n))
+  return (xs !! (i - 1))
+
+
+playToJSON move =
+  case move of
+   Nothing -> object []
+   Just (card, NoEffect) -> object ["card" .= card]
+   Just (card, Attack target) -> object ["card" .= card, "target" .= target]
+   Just (card, Guess target guess) -> object ["card" .= card, "target" .= target,
+                                              "guess" .= guess]
 
 
 spec :: Spec
@@ -115,6 +180,10 @@ spec = with hazardTestApp $ do
       game <- makeGameAs "foo" 2
       get (game ++ "/round/0") `shouldRespondWith` 404
 
+    it "Rounds don't exist for unstarted game" $ do
+      game <- makeGameAs "foo" 2
+      postAs "foo" (game ++ "/round/0") [json|null|] `shouldRespondWith` 404
+
     it "started game is started" $ do
       (game, _) <- makeStartedGame 3
       get game `shouldRespondWith` [json|{
@@ -179,6 +248,41 @@ spec = with hazardTestApp $ do
       (game, [_, _, baz]) <- makeStartedGame 3
       response <- getAs (encodeUtf8 baz) (game ++ "/round/0")
       jsonResponseIs response (isJust . getCard "dealtCard") True
+
+    it "POST without authorization fails" $ do
+      (game, _) <- makeStartedGame 3
+      post (game ++ "/round/0") [json|null|] `shouldRespondWith` requiresAuth
+
+    it "POST when it's not your turn returns error" $ do
+      (game, [foo, _, _]) <- makeStartedGame 3
+      postAs (encodeUtf8 foo) (game ++ "/round/0") [json|null|]
+        `shouldRespondWith` [json|{message: "Not your turn",
+                                   currentPlayer: 2}|] { matchStatus = 400 }
+
+    it "POST when you aren't in the game returns error" $ do
+      (game, _) <- makeStartedGame 3
+      post "/users" [json|{username: "qux"}|]
+      postAs "qux" (game ++ "/round/0") [json|null|]
+        `shouldRespondWith` [json|{message: "You are not playing"}|] { matchStatus = 400 }
+
+    it "POST does *something*" $ do
+      (game, [_, _, baz]) <- makeStartedGame 3
+      -- XXX: Since we don't know the cards, we don't know how to generate a
+      -- valid play. We could maybe try (using Haverer.Testing and the data
+      -- from GET), or we could somehow prefab the cards.
+
+      -- XXX: Since we don't know the layout of the cards, we don't know what
+      -- the response to the turn is going to be. I guess we should just
+      -- assert that it's going to have certain keys.
+      let roundUrl = game ++ "/round/0"
+          user = encodeUtf8 baz
+      (Just response) <- decode <$> simpleBody <$> getAs user roundUrl
+      let validPlays = getValidPlays response
+      move <- if null validPlays then return Nothing
+              else liftIO $ Just <$> choose validPlays
+      let message = playToJSON move
+      response' <- postAs user roundUrl (encode message)
+      jsonResponseIs response' (isJust . (getKey "id" :: Value -> Maybe Int)) True
 
   where
     makeGameAs :: Text -> Int -> WaiSession ByteString
