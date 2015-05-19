@@ -43,11 +43,11 @@ module Hazard.Model ( GameCreationError(..)
 
 import Prelude hiding (round)
 
+import Control.Error
 import Control.Monad (MonadPlus, guard, mzero)
 import Control.Monad.Random (MonadRandom)
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..))
 import qualified Data.Map as Map
-import Data.Maybe (isJust)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Haverer.Game as H
@@ -162,11 +162,6 @@ getDealt someone round = do
   viewer <- someone
   guard (viewer == pid)
   return dealt
-
-
--- XXX: Delete this when we add 'errors'
-justZ :: MonadPlus m => Maybe a -> m a
-justZ = maybe mzero return
 
 
 playerToJSON :: (Eq a, ToJSON a) => Maybe a -> a -> Player -> Value
@@ -308,21 +303,14 @@ playTurn' (Pending {}) _ = Left NotStarted
 playTurn' (InProgress {..}) playRequest =
   let round = head rounds in
   do
-    (round', result) <- playTurn'' round playRequest
-    case result of
-     Round.RoundOver -> error "Round over: need to make a new one (TYPES! RANDOMNESS!) unless whole game is over"
-     _ -> return (InProgress { game = game, rounds = round':tail rounds }, result)
+    (result, round') <- playTurn'' round playRequest
+    return (InProgress { game = game, rounds = round':tail rounds }, result)
 
 
-playTurn'' :: (Ord a, Show a) => Round a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round a, Round.Result a)
+playTurn'' :: (Ord a, Show a) => Round a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round.Result a, Round a)
 playTurn'' round playRequest =
-  -- XXX: This is duplicating Haverer.Engine.getPlay a fair bit.
-  case Round.playTurn round of
-   Left busted -> return busted
-   Right handlePlay ->
-     case playRequest of
-      Nothing -> Left PlayNotSpecified
-      Just (PlayRequest card play) ->
-        case handlePlay card play of
-         Left err -> Left (BadAction err)
-         Right result -> return result
+  fmapL BadAction $ Round.playTurn' round play
+  where
+    play = case playRequest of
+            Nothing -> Nothing
+            Just (PlayRequest card p) -> Just (card, p)

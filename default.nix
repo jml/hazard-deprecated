@@ -1,6 +1,6 @@
-{ mkDerivation, aeson, base, base64-bytestring, bytestring
-, containers, haverer, hspec-wai, hspec-wai-json, http-types
-, MonadRandom, random, Spock, stdenv, stm, tasty, tasty-hspec
+{ mkDerivation, aeson, base, base64-bytestring,
+, bytestring, containers, errors, haverer, hspec-wai, hspec-wai-json
+, http-types, MonadRandom, random, Spock, stdenv, stm, tasty, tasty-hspec
 , tasty-quickcheck, text, transformers, wai, wai-extra
 }:
 mkDerivation {
