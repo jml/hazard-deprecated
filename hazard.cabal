@@ -42,6 +42,8 @@ library
                , containers >= 0.5.6 && <0.6
                , basic-prelude >= 0.3.13 && < 0.5
                , errors >= 1.4.7 && < 1.5
+               , lens >= 4.7
+               , mtl >= 2.2 && <2.3
                , haverer
   exposed-modules: Hazard
                  , Hazard.HttpAuth
@@ -90,4 +92,3 @@ test-suite test
                , errors >= 1.4.7 && < 1.5
                , haverer
                , hazard
-               , haverer
