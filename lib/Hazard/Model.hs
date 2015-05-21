@@ -256,9 +256,7 @@ players =
 
 
 getRound :: Game a -> Int -> Maybe (Round a)
-getRound InProgress { rounds = rounds } i
-  | 0 <= i && i < length rounds = Just $ rounds !! i
-  | otherwise = Nothing
+getRound InProgress { rounds = rounds } i = atMay rounds i
 getRound _ _ = Nothing
 
 
@@ -283,9 +281,7 @@ joinGame' (Pending {..}) p
                                        , _players = newPlayers }
   where newPlayers = p:_players
         numNewPlayers = length newPlayers
-        newGame = case toPlayerSet newPlayers of
-                   Left e -> terror $ "Couldn't make game: " ++ show e
-                   Right r -> H.makeGame r
+        newGame = assertRight "Couldn't make game: " (H.makeGame <$> toPlayerSet newPlayers)
 
 
 data PlayError a = NotStarted | PlayNotSpecified | BadAction (Round.BadAction a) deriving Show
@@ -308,8 +304,8 @@ playTurn' (InProgress {..}) playRequest =
 
 playTurn'' :: (Ord a, Show a) => Round a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round.Result a, Round a)
 playTurn'' round playRequest =
-  fmapL BadAction $ Round.playTurn' round play
-  where
-    play = case playRequest of
-            Nothing -> Nothing
-            Just (PlayRequest card p) -> Just (card, p)
+  fmapL BadAction $ Round.playTurn' round (requestToPlay <$> playRequest)
+
+
+requestToPlay :: PlayRequest a -> (Card, Play a)
+requestToPlay (PlayRequest card p) = (card, p)

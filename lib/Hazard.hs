@@ -27,6 +27,7 @@ module Hazard ( Hazard
 
 import BasicPrelude hiding (round)
 
+import Control.Error
 import Control.Monad.Random (evalRandIO)
 import Control.Monad.STM (STM, atomically)
 import Control.Concurrent.STM (TVar, newTVar, modifyTVar, readTVar, writeTVar)
@@ -94,9 +95,7 @@ getGames = readTVar . games
 getGameSlot :: Hazard -> Int -> STM (Maybe (GameSlot Int))
 getGameSlot hazard i = do
   games' <- readTVar (games hazard)
-  if 0 <= i && i < length games'
-    then return $ Just (games' !! i)
-    else return Nothing
+  return $ atMay games' i
 
 
 getRound :: Hazard -> Int -> Int -> STM (Maybe (Round Int))
