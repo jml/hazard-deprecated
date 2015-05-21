@@ -22,7 +22,7 @@ import Test.Tasty
 import qualified GameIntegrationTest
 import qualified UserIntegrationTest
 
-import qualified ModelTest
+import qualified GamesTest
 
 
 suite :: IO TestTree
@@ -31,7 +31,7 @@ suite = do
   userSuite <- UserIntegrationTest.suite
   return $ testGroup "Hazard" [ gameSuite
                               , userSuite
-                              , ModelTest.suite
+                              , GamesTest.suite
                               ]
 
 

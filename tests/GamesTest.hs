@@ -17,8 +17,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
--- XXX: Rename to GameTest
-module ModelTest (suite) where
+module GamesTest (suite) where
 
 import BasicPrelude
 
