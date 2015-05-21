@@ -12,304 +12,62 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+module Hazard.Model (
+  Hazard
+  , addGame
+  , getGameSlot
+  , getGames
+  , makeHazard
+  , users
+  , setGame
+  , getRound
+  ) where
 
-module Hazard.Model ( GameCreationError(..)
-                    , GameCreationRequest(reqNumPlayers, reqTurnTimeout)
-                    , GameSlot
-                    , Game(Pending, InProgress)
-                    , JoinError(..)
-                    , Seconds
-                    , Validated(..)
-                    , creator
-                    , createGame
-                    , currentPlayer
-                    , gameState
-                    , getRound
-                    , getPlayers
-                    , joinGame
-                    , numPlayers
-                    , players
-                    , playTurn
-                    , requestGame
-                    , roundToJSON
-                    , turnTimeout
-                    , validateCreationRequest
-                    ) where
-
-import BasicPrelude hiding (round)
-
+import Control.Concurrent.STM (TVar, newTVar, modifyTVar, readTVar, writeTVar)
 import Control.Error
-import Control.Monad.Random (MonadRandom)
-import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..))
-import qualified Data.Map as Map
-import qualified Data.Text as Text
+import Control.Monad.STM (STM)
 
-import Haverer.Action (Play(..), viewAction)
-import qualified Haverer.Game as H
-import Haverer.Internal.Error
-import Haverer.Deck (Card(..))
-import Haverer.Player (Player, getDiscards, getHand, isProtected, toPlayers, toPlayerSet)
-import qualified Haverer.Round as Round
-import Haverer.Round (currentPlayer, currentTurn, getPlayers, getPlayerMap, Round, Event(..))
+import Haverer.Round (Round)
+
+import qualified Hazard.Games as Games
+import Hazard.Games (GameSlot)
+import Hazard.Users (UserDB, makeUserDB)
 
 
-type Seconds = Int
+data Hazard = Hazard { games :: TVar [GameSlot Int]
+                     , users :: UserDB
+                     }
 
 
-data Validated = Unchecked | Valid
+makeHazard :: STM Hazard
+makeHazard = Hazard <$> newTVar [] <*> makeUserDB
 
 
-data GameCreationError = InvalidNumberOfPlayers Int
-                       | InvalidTurnTimeout Seconds
-                       deriving (Eq, Show)
+getGames :: Hazard -> STM [GameSlot Int]
+getGames = readTVar . games
 
 
-data GameCreationRequest (a :: Validated) = GameCreationRequest {
-  reqNumPlayers :: Int,
-  reqTurnTimeout :: Seconds
-  } deriving (Eq, Show)
+getGameSlot :: Hazard -> Int -> STM (Maybe (GameSlot Int))
+getGameSlot hazard i = do
+  games' <- readTVar (games hazard)
+  return $ atMay games' i
 
 
-requestGame :: Int -> Seconds -> GameCreationRequest 'Unchecked
-requestGame = GameCreationRequest
+getRound :: Hazard -> Int -> Int -> STM (Maybe (Round Int))
+getRound hazard i j =
+  (fmap . (=<<)) (flip Games.getRound j . Games.gameState) (getGameSlot hazard i)
 
 
-validateCreationRequest :: GameCreationRequest 'Unchecked -> Either GameCreationError (GameCreationRequest 'Valid)
-validateCreationRequest (GameCreationRequest { .. })
-  | reqTurnTimeout <= 0 = Left $ InvalidTurnTimeout reqTurnTimeout
-  | reqNumPlayers < 2 = Left $ InvalidNumberOfPlayers reqNumPlayers
-  | reqNumPlayers > 4 = Left $ InvalidNumberOfPlayers reqNumPlayers
-  | otherwise = Right $ GameCreationRequest reqNumPlayers reqTurnTimeout
+addGame :: Hazard -> GameSlot Int -> STM ()
+addGame hazard game = do
+  let allGames = games hazard
+  games' <- readTVar allGames
+  writeTVar allGames (games' ++ [game])
 
 
-data PlayRequest a = PlayRequest Card (Play a) deriving (Eq, Show)
+setGame :: Hazard -> Int -> GameSlot Int -> STM ()
+setGame hazard i game =
+  modifyTVar (games hazard) $
+    \games' -> take i games' ++ [game] ++ drop (i+1) games'
 
 
-instance FromJSON a => FromJSON (PlayRequest a) where
-  parseJSON (Object v) = do
-    -- XXX: Find out how to do this all in one line into a tuple using
-    -- applicative functor
-    card <- v .: "card"
-    target <- v .:? "target"
-    guess <- v .:? "guess"
-    case (target, guess) of
-     (Nothing, Nothing) -> return $ PlayRequest card NoEffect
-     (Just player, Nothing) -> return $ PlayRequest card (Attack player)
-     (Just player, Just guess') -> return $ PlayRequest card (Guess player guess')
-     _ -> mzero
-  parseJSON _ = mzero
-
-
--- XXX: I'm ambivalent about having GameSlot & Game. The idea is that the
--- fields in GameSlot are all metadata, and entirely irrelevant to the "rules"
--- bit in gameState.
-
-data GameSlot a = GameSlot {
-  turnTimeout :: Seconds,
-  creator :: a,
-  gameState :: Game a
-  } deriving (Show)
-
-
-data Game a = Pending { _numPlayers :: Int
-                      , _players :: [a]
-                      }
-            | InProgress { game :: H.Game a
-                         , rounds :: [Round a]
-                         }
-            deriving (Show)
-
-
-instance ToJSON a => ToJSON (GameSlot a) where
-  toJSON slot =
-    object (specificFields ++ commonFields)
-    where
-      specificFields =
-        case gameState slot of
-         Pending {} -> ["state" .= ("pending" :: Text)]
-         InProgress {} -> [ "state" .= ("in-progress" :: Text)
-                          , "scores" .= replicate (length (players slot)) (0 :: Int)
-                          ]
-      commonFields = [ "turnTimeout" .= turnTimeout slot
-                     , "creator" .= creator slot
-                     , "numPlayers" .= numPlayers slot
-                     , "players" .= players slot
-                     ]
-
-
-instance (Ord a, ToJSON a) => ToJSON (Round a) where
-  toJSON = roundToJSON Nothing
-
-
-roundToJSON :: (Ord a, ToJSON a) => Maybe a -> Round a -> Value
-roundToJSON someone round =
-  object $ [ "players" .= (map playerToJSON' .  Map.assocs . getPlayerMap) round
-           , "currentPlayer" .= currentPlayer round
-           ] ++ (("dealtCard" .=) <$> justZ (getDealt someone round))
-  where playerToJSON' = uncurry (playerToJSON someone)
-
-
-getDealt :: (MonadPlus m, Ord a) => m a -> Round a -> m Card
-getDealt someone round = do
-  (pid, (dealt, _)) <- justZ (currentTurn round)
-  viewer <- someone
-  guard (viewer == pid)
-  return dealt
-
-
-playerToJSON :: (Eq a, ToJSON a) => Maybe a -> a -> Player -> Value
-playerToJSON someone pid player =
-  case someone of
-   Nothing -> object commonFields
-   Just viewer
-     | viewer == pid -> object $ ("hand" .= getHand player):commonFields
-     | otherwise -> playerToJSON Nothing pid player
-  where commonFields =
-          [ "id" .= pid
-          , "active" .= (isJust . getHand) player
-          , "protected" .= isProtected player
-          , "discards" .= getDiscards player
-          ]
-
-
-instance ToJSON Card where
-
-  toJSON = toJSON . show
-
-
-instance ToJSON a => ToJSON (Round.Result a) where
-
-  toJSON (Round.BustedOut playerId dealt hand) =
-    object [ "result" .= ("busted" :: Text)
-           , "id" .= playerId
-           , "dealt" .= dealt
-           , "hand" .= hand
-           ]
-  toJSON (Round.Played action event) =
-    object $ [ "result" .= ("played" :: Text) ] ++ actions ++ events
-    where
-      actions =
-        let (pid, card, play) = viewAction action in
-         [ "id" .= pid, "card" .= card ] ++
-         case play of
-          NoEffect -> []
-          Attack target -> ["target" .= target]
-          Guess target guess -> ["target" .= target, "guess" .= guess]
-      events = case event of
-                NoChange -> [ "result" .= ("no-change" :: Text) ]
-                Protected pid -> [ "result" .= ("protected" :: Text)
-                                 , "protected" .= pid
-                                 ]
-                SwappedHands tgt src -> [ "result" .= ("swapped-hands" :: Text)
-                                        , "swapped-hands" .= [src, tgt]
-                                        ]
-                Eliminated pid -> [ "result" .= ("eliminated" :: Text)
-                                  , "eliminated" .= pid ]
-                ForcedDiscard {} -> [ "result" .= ("forced-discard" :: Text) ]
-                ForcedReveal src tgt _ -> [ "result" .= ("forced-reveal" :: Text)
-                                          , "forced-reveal" .= [src, tgt]
-                                          ]
-
-instance FromJSON Card where
-
-  parseJSON (String s) =
-    case Text.toLower s of
-     "soldier"   -> return Soldier
-     "clown"     -> return Clown
-     "knight"    -> return Knight
-     "priestess" -> return Priestess
-     "wizard"    -> return Wizard
-     "general"   -> return General
-     "minister"  -> return Minister
-     "prince"    -> return Prince
-     _ -> mzero
-  parseJSON _ = mzero
-
-
-createGame :: a -> GameCreationRequest 'Valid -> GameSlot a
-createGame userId request = GameSlot { turnTimeout = reqTurnTimeout request
-                                     , creator = userId
-                                     , gameState = Pending { _numPlayers = reqNumPlayers request
-                                                           , _players = [userId]
-                                                           }
-                                     }
-
-
-numPlayers :: GameSlot a -> Int
-numPlayers =
-  numPlayers' . gameState
-  where numPlayers' (Pending { _numPlayers = _numPlayers }) = _numPlayers
-        numPlayers' (InProgress { game = game' }) = (length . toPlayers . H.players) game'
-
-
-players :: GameSlot a -> [a]
-players =
-  players' . gameState
-  where players' (Pending { _players = _players }) = _players
-        players' (InProgress { game = game }) = (toPlayers . H.players) game
-
-
-getRound :: Game a -> Int -> Maybe (Round a)
-getRound InProgress { rounds = rounds } i
-  | 0 <= i && i < length rounds = Just $ rounds !! i
-  | otherwise = Nothing
-getRound _ _ = Nothing
-
-
-data JoinError = AlreadyStarted | AlreadyJoined deriving (Eq, Show)
-
-joinGame :: (MonadRandom m, Show a, Ord a) => GameSlot a -> a -> Either JoinError (m (GameSlot a))
-joinGame slot p = do
-  newState <- joinGame' (gameState slot) p
-  return $ do
-    newState' <- newState
-    return $ slot { gameState = newState' }
-
-
-joinGame' :: (Show a, Ord a, MonadRandom m) => Game a -> a -> Either JoinError (m (Game a))
-joinGame' (InProgress {}) _ = Left AlreadyStarted
-joinGame' (Pending {..}) p
-  | p `elem` _players = Left AlreadyJoined
-  | numNewPlayers == _numPlayers = Right $ do
-      round <- H.newRound newGame
-      return $ InProgress newGame (pure round)
-  | otherwise = Right $ return Pending { _numPlayers = _numPlayers
-                                       , _players = newPlayers }
-  where newPlayers = p:_players
-        numNewPlayers = length newPlayers
-        newGame = case toPlayerSet newPlayers of
-                   Left e -> terror $ "Couldn't make game: " ++ show e
-                   Right r -> H.makeGame r
-
-
-data PlayError a = NotStarted | PlayNotSpecified | BadAction (Round.BadAction a) deriving Show
-
-
-playTurn :: (Ord a, Show a) => GameSlot a -> Maybe (PlayRequest a) -> Either (PlayError a) (GameSlot a, Round.Result a)
-playTurn slot r = do
-  (newState, result) <- playTurn' (gameState slot) r
-  return (slot { gameState = newState }, result)
-
-
-playTurn' :: (Ord a, Show a) => Game a -> Maybe (PlayRequest a) -> Either (PlayError a) (Game a, Round.Result a)
-playTurn' (Pending {}) _ = Left NotStarted
-playTurn' (InProgress {..}) playRequest =
-  let round = head rounds in
-  do
-    (result, round') <- playTurn'' round playRequest
-    return (InProgress { game = game, rounds = round':tail rounds }, result)
-
-
-playTurn'' :: (Ord a, Show a) => Round a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round.Result a, Round a)
-playTurn'' round playRequest =
-  fmapL BadAction $ Round.playTurn' round play
-  where
-    play = case playRequest of
-            Nothing -> Nothing
-            Just (PlayRequest card p) -> Just (card, p)

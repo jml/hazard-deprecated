@@ -14,24 +14,21 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Hazard ( Hazard
+module Hazard ( makeHazard
               , hazardWeb
               , hazardWeb'
-              , makeHazard
               ) where
 
 
 import BasicPrelude hiding (round)
 
 import Control.Monad.Random (evalRandIO)
-import Control.Monad.STM (STM, atomically)
-import Control.Concurrent.STM (TVar, newTVar, modifyTVar, readTVar, writeTVar)
+import Control.Monad.STM (atomically)
 
-import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
+import Data.Aeson (FromJSON(..), ToJSON(..), (.=), object)
 import Network.HTTP.Types.Status
 import Network.Wai (requestMethod, pathInfo)
 import Network.Wai.Middleware.HttpAuth
@@ -39,21 +36,26 @@ import Web.Spock.Safe
 
 
 import Haverer.Internal.Error
-import Haverer.Round (Round)
-
 
 import Hazard.HttpAuth (maybeLoggedIn)
 
-import qualified Hazard.Model as Model
 import Hazard.Model (
+  Hazard,
+  addGame,
+  getGameSlot,
+  getGames,
+  getRound,
+  makeHazard,
+  setGame,
+  users
+  )
+
+import qualified Hazard.Games as Games
+import Hazard.Games (
   createGame,
-  GameCreationRequest(..),
-  GameSlot,
   JoinError(..),
   joinGame,
-  requestGame,
   roundToJSON,
-  Validated(Unchecked),
   validateCreationRequest)
 
 import Hazard.Users (
@@ -63,58 +65,8 @@ import Hazard.Users (
   getUserByID,
   getUserIDByName,
   makePassword,
-  makeUserDB,
   usernames
   )
-
-
-instance ToJSON (GameCreationRequest a) where
-  toJSON r = object [ "numPlayers" .= reqNumPlayers r
-                    , "turnTimeout" .= reqTurnTimeout r
-                    ]
-
-instance FromJSON (GameCreationRequest 'Unchecked) where
-  parseJSON (Object v) = requestGame <$> v .: "numPlayers" <*> v .: "turnTimeout"
-  parseJSON _ = mzero
-
-
-data Hazard = Hazard { games :: TVar [GameSlot Int]
-                     , users :: UserDB
-                     }
-
-
-makeHazard :: STM Hazard
-makeHazard = Hazard <$> newTVar [] <*> makeUserDB
-
-
-getGames :: Hazard -> STM [GameSlot Int]
-getGames = readTVar . games
-
-
-getGameSlot :: Hazard -> Int -> STM (Maybe (GameSlot Int))
-getGameSlot hazard i = do
-  games' <- readTVar (games hazard)
-  if 0 <= i && i < length games'
-    then return $ Just (games' !! i)
-    else return Nothing
-
-
-getRound :: Hazard -> Int -> Int -> STM (Maybe (Round Int))
-getRound hazard i j =
-  (fmap . (=<<)) (flip Model.getRound j . Model.gameState) (getGameSlot hazard i)
-
-
-addGame :: Hazard -> GameSlot Int -> STM ()
-addGame hazard game = do
-  let allGames = games hazard
-  games' <- readTVar allGames
-  writeTVar allGames (games' ++ [game])
-
-
-setGame :: Hazard -> Int -> GameSlot Int -> STM ()
-setGame hazard i game =
-  modifyTVar (games hazard) $
-    \games' -> take i games' ++ [game] ++ drop (i+1) games'
 
 
 errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()
@@ -255,20 +207,20 @@ hazardWeb' hazard pwgen = do
     case round of
      Nothing -> errorMessage notFound404 ("no such round" :: Text)
      Just round'
-       | poster `notElem` Model.getPlayers round' ->
+       | poster `notElem` Games.getPlayers round' ->
            do setStatus badRequest400
               json (object ["message" .= ("You are not playing" :: Text)])
-       | Just poster /= Model.currentPlayer round' ->
+       | Just poster /= Games.currentPlayer round' ->
            do setStatus badRequest400
               json (object ["message" .= ("Not your turn" :: Text),
-                            "currentPlayer" .= Model.currentPlayer round'])
+                            "currentPlayer" .= Games.currentPlayer round'])
        | otherwise ->
            do playRequest <- expectJSON
               game <- liftIO $ atomically $ getGameSlot hazard gameId
               case game of
                Nothing -> error "Found round but not game. WTF?"
                Just game' ->
-                 case Model.playTurn game' playRequest of
+                 case Games.playTurn game' playRequest of
                   Left e -> do
                     setStatus badRequest400
                     json (object ["message" .= show e])

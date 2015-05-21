@@ -17,7 +17,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module ModelTest (suite) where
+module GamesTest (suite) where
 
 import BasicPrelude
 
@@ -32,7 +32,7 @@ import Test.Tasty.QuickCheck
 import Haverer.Internal.Error
 import Haverer.Deck (Card(..))
 
-import Hazard.Model (GameCreationRequest(..),
+import Hazard.Games (GameCreationRequest(..),
                      GameSlot,
                      Game(Pending, InProgress),
                      Validated(..),
@@ -115,7 +115,7 @@ prop_jsonEquivalent value =
 
 
 suite :: TestTree
-suite = testGroup "Hazard.Model" [
+suite = testGroup "Hazard.Games" [
   testGroup "createGame"
   [ testProperty "uses requested turnTimeout" $
     \x y -> let g = createGame (x :: Int) y in turnTimeout g == reqTurnTimeout y

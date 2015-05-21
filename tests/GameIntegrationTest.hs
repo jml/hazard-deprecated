@@ -16,7 +16,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
 
-module GameTest (suite) where
+module GameIntegrationTest (suite) where
 
 import BasicPrelude
 

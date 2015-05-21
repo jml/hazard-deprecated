@@ -17,7 +17,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 
 
-module UserTest (suite) where
+module UserIntegrationTest (suite) where
 
 import BasicPrelude
 
