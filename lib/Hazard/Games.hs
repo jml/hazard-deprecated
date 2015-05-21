@@ -19,7 +19,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Hazard.Model ( GameCreationError(..)
+module Hazard.Games ( GameCreationError(..)
                     , GameCreationRequest(reqNumPlayers, reqTurnTimeout)
                     , GameSlot
                     , Game(Pending, InProgress)

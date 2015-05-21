@@ -45,8 +45,8 @@ import Haverer.Round (Round)
 
 import Hazard.HttpAuth (maybeLoggedIn)
 
-import qualified Hazard.Model as Model
-import Hazard.Model (
+import qualified Hazard.Games as Games
+import Hazard.Games (
   createGame,
   GameCreationRequest(..),
   GameSlot,
@@ -100,7 +100,7 @@ getGameSlot hazard i = do
 
 getRound :: Hazard -> Int -> Int -> STM (Maybe (Round Int))
 getRound hazard i j =
-  (fmap . (=<<)) (flip Model.getRound j . Model.gameState) (getGameSlot hazard i)
+  (fmap . (=<<)) (flip Games.getRound j . Games.gameState) (getGameSlot hazard i)
 
 
 addGame :: Hazard -> GameSlot Int -> STM ()
@@ -254,20 +254,20 @@ hazardWeb' hazard pwgen = do
     case round of
      Nothing -> errorMessage notFound404 ("no such round" :: Text)
      Just round'
-       | poster `notElem` Model.getPlayers round' ->
+       | poster `notElem` Games.getPlayers round' ->
            do setStatus badRequest400
               json (object ["message" .= ("You are not playing" :: Text)])
-       | Just poster /= Model.currentPlayer round' ->
+       | Just poster /= Games.currentPlayer round' ->
            do setStatus badRequest400
               json (object ["message" .= ("Not your turn" :: Text),
-                            "currentPlayer" .= Model.currentPlayer round'])
+                            "currentPlayer" .= Games.currentPlayer round'])
        | otherwise ->
            do playRequest <- expectJSON
               game <- liftIO $ atomically $ getGameSlot hazard gameId
               case game of
                Nothing -> error "Found round but not game. WTF?"
                Just game' ->
-                 case Model.playTurn game' playRequest of
+                 case Games.playTurn game' playRequest of
                   Left e -> do
                     setStatus badRequest400
                     json (object ["message" .= show e])
