@@ -60,6 +60,7 @@ import Hazard.Games (
 
 import Hazard.Users (
   UserDB,
+  UserID,
   addUser,
   authenticate,
   getUserByID,
@@ -130,7 +131,7 @@ authUserDB userDB username password = do
   return (isJust found)
 
 
-maybeLoggedInUser :: MonadIO m => UserDB -> ActionT m (Maybe Int)
+maybeLoggedInUser :: MonadIO m => UserDB -> ActionT m (Maybe UserID)
 maybeLoggedInUser userDB = do
   req <- request
   case maybeLoggedIn req of
@@ -138,7 +139,7 @@ maybeLoggedInUser userDB = do
    Nothing -> return Nothing
 
 
-loggedInUser :: MonadIO m => UserDB -> ActionT m Int
+loggedInUser :: MonadIO m => UserDB -> ActionT m UserID
 loggedInUser userDB = do
   maybeUser <- maybeLoggedInUser userDB
   case maybeUser of
