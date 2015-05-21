@@ -20,14 +20,15 @@ import BasicPrelude
 import Test.Tasty
 
 import qualified GameIntegrationTest
+import qualified UserIntegrationTest
+
 import qualified ModelTest
-import qualified UserTest
 
 
 suite :: IO TestTree
 suite = do
   gameSuite <- GameIntegrationTest.suite
-  userSuite <- UserTest.suite
+  userSuite <- UserIntegrationTest.suite
   return $ testGroup "Hazard" [ gameSuite
                               , userSuite
                               , ModelTest.suite
