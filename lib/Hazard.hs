@@ -18,19 +18,16 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Hazard ( Hazard
+module Hazard ( makeHazard
               , hazardWeb
               , hazardWeb'
-              , makeHazard
               ) where
 
 
 import BasicPrelude hiding (round)
 
-import Control.Error
 import Control.Monad.Random (evalRandIO)
-import Control.Monad.STM (STM, atomically)
-import Control.Concurrent.STM (TVar, newTVar, modifyTVar, readTVar, writeTVar)
+import Control.Monad.STM (atomically)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 import Network.HTTP.Types.Status
@@ -40,16 +37,24 @@ import Web.Spock.Safe
 
 
 import Haverer.Internal.Error
-import Haverer.Round (Round)
-
 
 import Hazard.HttpAuth (maybeLoggedIn)
+
+import Hazard.Model (
+  Hazard,
+  addGame,
+  getGameSlot,
+  getGames,
+  getRound,
+  makeHazard,
+  setGame,
+  users
+  )
 
 import qualified Hazard.Games as Games
 import Hazard.Games (
   createGame,
   GameCreationRequest(..),
-  GameSlot,
   JoinError(..),
   joinGame,
   requestGame,
@@ -64,7 +69,6 @@ import Hazard.Users (
   getUserByID,
   getUserIDByName,
   makePassword,
-  makeUserDB,
   usernames
   )
 
@@ -77,43 +81,6 @@ instance ToJSON (GameCreationRequest a) where
 instance FromJSON (GameCreationRequest 'Unchecked) where
   parseJSON (Object v) = requestGame <$> v .: "numPlayers" <*> v .: "turnTimeout"
   parseJSON _ = mzero
-
-
-data Hazard = Hazard { games :: TVar [GameSlot Int]
-                     , users :: UserDB
-                     }
-
-
-makeHazard :: STM Hazard
-makeHazard = Hazard <$> newTVar [] <*> makeUserDB
-
-
-getGames :: Hazard -> STM [GameSlot Int]
-getGames = readTVar . games
-
-
-getGameSlot :: Hazard -> Int -> STM (Maybe (GameSlot Int))
-getGameSlot hazard i = do
-  games' <- readTVar (games hazard)
-  return $ atMay games' i
-
-
-getRound :: Hazard -> Int -> Int -> STM (Maybe (Round Int))
-getRound hazard i j =
-  (fmap . (=<<)) (flip Games.getRound j . Games.gameState) (getGameSlot hazard i)
-
-
-addGame :: Hazard -> GameSlot Int -> STM ()
-addGame hazard game = do
-  let allGames = games hazard
-  games' <- readTVar allGames
-  writeTVar allGames (games' ++ [game])
-
-
-setGame :: Hazard -> Int -> GameSlot Int -> STM ()
-setGame hazard i game =
-  modifyTVar (games hazard) $
-    \games' -> take i games' ++ [game] ++ drop (i+1) games'
 
 
 errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()

@@ -46,6 +46,7 @@ library
   exposed-modules: Hazard
                  , Hazard.HttpAuth
                  , Hazard.Games
+                 , Hazard.Model
                  , Hazard.Users
   default-language:    Haskell2010
   ghc-options: -Wall
