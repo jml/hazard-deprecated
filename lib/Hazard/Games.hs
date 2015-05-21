@@ -13,6 +13,7 @@
 -- limitations under the License.
 
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -74,6 +75,16 @@ data GameCreationRequest (a :: Validated) = GameCreationRequest {
   reqNumPlayers :: Int,
   reqTurnTimeout :: Seconds
   } deriving (Eq, Show)
+
+
+instance ToJSON (GameCreationRequest a) where
+  toJSON r = object [ "numPlayers" .= reqNumPlayers r
+                    , "turnTimeout" .= reqTurnTimeout r
+                    ]
+
+instance FromJSON (GameCreationRequest 'Unchecked) where
+  parseJSON (Object v) = requestGame <$> v .: "numPlayers" <*> v .: "turnTimeout"
+  parseJSON _ = mzero
 
 
 requestGame :: Int -> Seconds -> GameCreationRequest 'Unchecked

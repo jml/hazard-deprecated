@@ -14,7 +14,6 @@
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -29,7 +28,7 @@ import BasicPrelude hiding (round)
 import Control.Monad.Random (evalRandIO)
 import Control.Monad.STM (atomically)
 
-import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
+import Data.Aeson (FromJSON(..), ToJSON(..), (.=), object)
 import Network.HTTP.Types.Status
 import Network.Wai (requestMethod, pathInfo)
 import Network.Wai.Middleware.HttpAuth
@@ -54,12 +53,9 @@ import Hazard.Model (
 import qualified Hazard.Games as Games
 import Hazard.Games (
   createGame,
-  GameCreationRequest(..),
   JoinError(..),
   joinGame,
-  requestGame,
   roundToJSON,
-  Validated(Unchecked),
   validateCreationRequest)
 
 import Hazard.Users (
@@ -71,16 +67,6 @@ import Hazard.Users (
   makePassword,
   usernames
   )
-
-
-instance ToJSON (GameCreationRequest a) where
-  toJSON r = object [ "numPlayers" .= reqNumPlayers r
-                    , "turnTimeout" .= reqTurnTimeout r
-                    ]
-
-instance FromJSON (GameCreationRequest 'Unchecked) where
-  parseJSON (Object v) = requestGame <$> v .: "numPlayers" <*> v .: "turnTimeout"
-  parseJSON _ = mzero
 
 
 errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()
