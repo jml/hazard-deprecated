@@ -110,10 +110,10 @@ instance FromJSON a => FromJSON (PlayRequest a) where
     card <- v .: "card"
     target <- v .:? "target"
     guess <- v .:? "guess"
-    case (target, guess) of
-     (Nothing, Nothing) -> return $ PlayRequest card NoEffect
-     (Just player, Nothing) -> return $ PlayRequest card (Attack player)
-     (Just player, Just guess') -> return $ PlayRequest card (Guess player guess')
+    PlayRequest card <$> case (target, guess) of
+     (Nothing, Nothing) -> return NoEffect
+     (Just player, Nothing) -> return $ Attack player
+     (Just player, Just guess') -> return $ Guess player guess'
      _ -> mzero
   parseJSON _ = mzero
 
@@ -286,9 +286,7 @@ joinGame' :: (Show a, Ord a, MonadRandom m) => Game a -> a -> Either JoinError (
 joinGame' (InProgress {}) _ = Left AlreadyStarted
 joinGame' (Pending {..}) p
   | p `elem` _players = Left AlreadyJoined
-  | numNewPlayers == _numPlayers = Right $ do
-      round <- H.newRound newGame
-      return $ InProgress newGame (pure round)
+  | numNewPlayers == _numPlayers = return $ InProgress newGame <$> pure <$> H.newRound newGame
   | otherwise = Right $ return Pending { _numPlayers = _numPlayers
                                        , _players = newPlayers }
   where newPlayers = p:_players
