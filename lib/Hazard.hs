@@ -188,7 +188,7 @@ hazardWeb' hazard pwgen = do
      Nothing -> errorMessage notFound404 ("no such game" :: Text)
      Just game' ->
        case joinGame game' joiner of
-        Left AlreadyJoined -> json game'
+        Left (AlreadyJoined _) -> json game'
         Left AlreadyStarted -> badRequest ("Game already started" :: Text)
         Right r -> do
           game'' <- liftIO $ evalRandIO r

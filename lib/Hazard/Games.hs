@@ -272,9 +272,9 @@ getRound InProgress { rounds = rounds } i = atMay rounds i
 getRound _ _ = Nothing
 
 
-data JoinError = AlreadyStarted | AlreadyJoined deriving (Eq, Show)
+data JoinError a = AlreadyStarted | AlreadyJoined a deriving (Eq, Show)
 
-joinGame :: (MonadRandom m, Show a, Ord a) => GameSlot a -> a -> Either JoinError (m (GameSlot a))
+joinGame :: (MonadRandom m, Show a, Ord a) => GameSlot a -> a -> Either (JoinError a) (m (GameSlot a))
 joinGame slot p = do
   newState <- joinGame' (gameState slot) p
   return $ do
@@ -282,10 +282,10 @@ joinGame slot p = do
     return $ slot { gameState = newState' }
 
 
-joinGame' :: (Show a, Ord a, MonadRandom m) => Game a -> a -> Either JoinError (m (Game a))
+joinGame' :: (Show a, Ord a, MonadRandom m) => Game a -> a -> Either (JoinError a) (m (Game a))
 joinGame' (InProgress {}) _ = Left AlreadyStarted
 joinGame' (Pending {..}) p
-  | p `elem` _players = Left AlreadyJoined
+  | p `elem` _players = Left (AlreadyJoined p)
   | numNewPlayers == _numPlayers = return $ InProgress newGame <$> pure <$> H.newRound newGame
   | otherwise = Right $ return Pending { _numPlayers = _numPlayers
                                        , _players = newPlayers }
