@@ -47,6 +47,7 @@ import BasicPrelude hiding (round)
 
 import Control.Error
 import Control.Monad.Random (MonadRandom)
+import Control.Monad.State
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..))
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -299,23 +300,15 @@ data PlayError a = NotStarted | PlayNotSpecified | BadAction (Round.BadAction a)
 
 
 playTurn :: (Ord a, Show a) => GameSlot a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round.Result a, GameSlot a)
-playTurn slot r = do
-  (result, newState) <- playTurn' (gameState slot) r
-  return (result, slot { gameState = newState })
-
-
-playTurn' :: (Ord a, Show a) => Game a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round.Result a, Game a)
-playTurn' (Pending {}) _ = Left NotStarted
-playTurn' (InProgress {..}) playRequest =
-  let round = head rounds in
-  do
-    (result, round') <- playTurn'' round playRequest
-    return (result, InProgress { game = game, rounds = round':tail rounds })
-
-
-playTurn'' :: (Ord a, Show a) => Round a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round.Result a, Round a)
-playTurn'' round playRequest =
-  fmapL BadAction $ Round.playTurn' round (requestToPlay <$> playRequest)
+playTurn slot playRequest = flip runStateT slot $
+  case gameState slot of
+   Pending {} -> lift $ Left NotStarted
+   InProgress {..} ->
+     let round = head rounds in
+     do
+       (result, round') <- lift $ fmapL BadAction $ Round.playTurn' round (requestToPlay <$> playRequest)
+       put (slot { gameState = InProgress { game = game, rounds = round':tail rounds } })
+       return result
 
 
 requestToPlay :: PlayRequest a -> (Card, Play a)
