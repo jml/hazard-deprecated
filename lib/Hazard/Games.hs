@@ -298,19 +298,19 @@ joinGame' (Pending {..}) p
 data PlayError a = NotStarted | PlayNotSpecified | BadAction (Round.BadAction a) deriving Show
 
 
-playTurn :: (Ord a, Show a) => GameSlot a -> Maybe (PlayRequest a) -> Either (PlayError a) (GameSlot a, Round.Result a)
+playTurn :: (Ord a, Show a) => GameSlot a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round.Result a, GameSlot a)
 playTurn slot r = do
-  (newState, result) <- playTurn' (gameState slot) r
-  return (slot { gameState = newState }, result)
+  (result, newState) <- playTurn' (gameState slot) r
+  return (result, slot { gameState = newState })
 
 
-playTurn' :: (Ord a, Show a) => Game a -> Maybe (PlayRequest a) -> Either (PlayError a) (Game a, Round.Result a)
+playTurn' :: (Ord a, Show a) => Game a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round.Result a, Game a)
 playTurn' (Pending {}) _ = Left NotStarted
 playTurn' (InProgress {..}) playRequest =
   let round = head rounds in
   do
     (result, round') <- playTurn'' round playRequest
-    return (InProgress { game = game, rounds = round':tail rounds }, result)
+    return (result, InProgress { game = game, rounds = round':tail rounds })
 
 
 playTurn'' :: (Ord a, Show a) => Round a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round.Result a, Round a)

@@ -225,7 +225,7 @@ hazardWeb' hazard pwgen = do
                   Left e -> do
                     setStatus badRequest400
                     json (object ["message" .= show e])
-                  Right (game'', result) -> do
+                  Right (result, game'') -> do
                     liftIO $ atomically $ setGame hazard gameId game''
                     json result
 
