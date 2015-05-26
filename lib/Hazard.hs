@@ -46,6 +46,7 @@ import Hazard.Model (
   getGames,
   getRound,
   makeHazard,
+  performSlotAction,
   setGame,
   users
   )
@@ -54,7 +55,8 @@ import qualified Hazard.Games as Games
 import Hazard.Games (
   createGame,
   JoinError(..),
-  joinGame,
+  GameError(..),
+  joinSlot,
   roundToJSON,
   validateCreationRequest)
 
@@ -180,20 +182,12 @@ hazardWeb' hazard pwgen = do
 
   post ("game" <//> var) $ \gameId -> do
     joiner <- loggedInUser (users hazard)
-    -- XXX: Here and elsewhere, our concurrency model is completely wrong,
-    -- since the game (or round, or whatever) can be modified between the
-    -- first 'atomically' and the second 'atomically'.
-    game <- liftIO $ atomically $ getGameSlot hazard gameId
-    case game of
-     Nothing -> errorMessage notFound404 ("no such game" :: Text)
-     Just game' ->
-       case joinGame game' joiner of
-        Left (AlreadyJoined _) -> json game'
-        Left AlreadyStarted -> badRequest ("Game already started" :: Text)
-        Right r -> do
-          game'' <- liftIO $ evalRandIO r
-          liftIO $ atomically $ setGame hazard gameId game''
-          json game''
+    result <- liftIO $ performSlotAction hazard gameId (joinSlot joiner)
+    case result of
+     Left (GameNotFound _) -> errorMessage notFound404 ("no such game" :: Text)
+     Left (JoinError AlreadyStarted) -> badRequest ("Game already started" :: Text)
+     Left e -> terror $ show e
+     Right (_, game) -> json game
 
   get ("game" <//> var <//> "round" <//> var) $ \gameId roundId -> do
     viewer <- maybeLoggedInUser (users hazard)

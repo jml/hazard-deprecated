@@ -18,6 +18,7 @@ module Hazard.Model (
   , getGameSlot
   , getGames
   , makeHazard
+  , performSlotAction
   , users
   , setGame
   , getRound

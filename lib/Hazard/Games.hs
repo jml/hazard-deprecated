@@ -38,7 +38,7 @@ module Hazard.Games ( GameCreationError(..)
                     , gameState
                     , getRound
                     , getPlayers
-                    , joinGame
+                    , joinSlot
                     , numPlayers
                     , players
                     , playTurn
@@ -51,19 +51,37 @@ module Hazard.Games ( GameCreationError(..)
 import BasicPrelude hiding (round)
 
 import Control.Error
-import Control.Monad.Random (MonadRandom, RandomGen, RandT, evalRandT)
+import Control.Monad.Random
 import Control.Monad.State
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..))
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 
-import Haverer.Action (Play(..), viewAction)
-import qualified Haverer.Game as H
 import Haverer.Internal.Error
-import Haverer.Deck (Card(..))
-import Haverer.Player (Player, getDiscards, getHand, isProtected, toPlayers, toPlayerSet)
+
+import Haverer (
+  Card(..),
+  Complete,
+  Deck,
+  Event(..),
+  Play(..),
+  Player,
+  Round,
+  currentPlayer,
+  currentTurn,
+  getDiscards,
+  getPlayers,
+  getPlayerMap,
+  getHand,
+  isProtected,
+  newDeck,
+  toPlayers,
+  toPlayerSet,
+  viewAction
+  )
+import qualified Haverer.Game as H
+import qualified Haverer.Player as P
 import qualified Haverer.Round as Round
-import Haverer.Round (currentPlayer, currentTurn, getPlayers, getPlayerMap, Round, Event(..))
 
 
 data GameError a = GameNotFound Int
@@ -72,7 +90,7 @@ data GameError a = GameNotFound Int
                  deriving (Show)
 
 data JoinError a = AlreadyStarted
-                 | AlreadyJoined a
+                 | InvalidPlayers (P.Error a)
                  deriving (Eq, Show)
 
 data PlayError a = NotStarted
@@ -152,6 +170,7 @@ data GameSlot a = GameSlot {
 data Game a = Pending { _numPlayers :: Int
                       , _players :: [a]
                       }
+            | Ready { _playerSet :: P.PlayerSet a }
             | InProgress { game :: H.Game a
                          , rounds :: [Round a]
                          }
@@ -284,6 +303,7 @@ players :: GameSlot a -> [a]
 players =
   players' . gameState
   where players' (Pending { _players = _players }) = _players
+        players' (Ready { _playerSet = _playerSet }) = toPlayers _playerSet
         players' (InProgress { game = game }) = (toPlayers . H.players) game
 
 
@@ -292,37 +312,63 @@ getRound InProgress { rounds = rounds } i = atMay rounds i
 getRound _ _ = Nothing
 
 
-type SlotAction g p a = RandT g (StateT (GameSlot p) (Either (GameError p))) a
+type SlotAction g p a = StateT (GameSlot p) (RandT g (Either (GameError p))) a
 
 type SlotAction' p a = StateT (GameSlot p) (Either (GameError p)) a
 
 
 runSlotAction :: RandomGen g => SlotAction g p a -> g -> GameSlot p -> Either (GameError p) (a, GameSlot p)
-runSlotAction action gen = runSlotAction' (evalRandT action gen)
+runSlotAction action gen slot = evalRandT (runStateT action slot) gen
 
 
 runSlotAction' :: SlotAction' p a -> GameSlot p -> Either (GameError p) (a, GameSlot p)
 runSlotAction' = runStateT
 
 
-joinGame :: (MonadRandom m, Show a, Ord a) => GameSlot a -> a -> Either (JoinError a) (m (GameSlot a))
-joinGame slot p = do
-  newState <- joinGame' (gameState slot) p
-  return $ do
-    newState' <- newState
-    return $ slot { gameState = newState' }
+modifyGame :: (Game a -> RandT g (Either (GameError a)) (Game a)) -> SlotAction g a ()
+modifyGame f = do
+  slot <- get
+  let game = gameState slot
+  game'' <- (lift . f) game
+  put (slot { gameState = game'' })
 
 
-joinGame' :: (Show a, Ord a, MonadRandom m) => Game a -> a -> Either (JoinError a) (m (Game a))
-joinGame' (InProgress {}) _ = Left AlreadyStarted
-joinGame' (Pending {..}) p
-  | p `elem` _players = Left (AlreadyJoined p)
-  | numNewPlayers == _numPlayers = return $ InProgress newGame <$> pure <$> H.newRound newGame
-  | otherwise = Right $ return Pending { _numPlayers = _numPlayers
-                                       , _players = newPlayers }
+joinSlot :: (RandomGen g, Ord p, Show p) => p -> SlotAction g p ()
+joinSlot p = modifyGame $ \game ->
+  do
+    game' <- (lift . fmapL JoinError . joinGame p) game
+    case game' of
+     Ready playerSet -> do
+       deck <- newDeck
+       return $ makeGame deck playerSet
+     _ -> return game'
+
+
+joinGame :: (Show a, Ord a) => a -> Game a -> Either (JoinError a) (Game a)
+joinGame _ (InProgress {}) = Left AlreadyStarted
+joinGame _ (Ready {}) = Left AlreadyStarted
+joinGame p g@(Pending {..})
+  | p `elem` _players = return g
+  | numNewPlayers == _numPlayers =
+      Ready <$> fmapL InvalidPlayers (toPlayerSet newPlayers)
+  | otherwise = return Pending { _numPlayers = _numPlayers
+                               , _players = newPlayers }
   where newPlayers = p:_players
         numNewPlayers = length newPlayers
-        newGame = assertRight "Couldn't make game: " (H.makeGame <$> toPlayerSet newPlayers)
+
+
+makeGame :: (Show a, Ord a) => Deck Complete -> P.PlayerSet a -> Game a
+makeGame deck playerSet = do
+  let game = H.makeGame playerSet
+  let round = H.newRound' game deck
+  InProgress { game = game, rounds = pure round }
+
+
+startRound :: (Ord a, Show a) => Deck Complete -> Game a -> Either (PlayError a) (Game a)
+startRound _ (Pending {}) = Left NotStarted
+startRound _ (Ready {}) = Left NotStarted
+startRound deck g@(InProgress { .. }) =
+  return g { rounds = rounds ++ pure (H.newRound' game deck) }
 
 
 
