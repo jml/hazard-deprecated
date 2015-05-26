@@ -22,11 +22,16 @@
 
 module Hazard.Games ( GameCreationError(..)
                     , GameCreationRequest(reqNumPlayers, reqTurnTimeout)
+                    , Validated(..)
+                    , GameError(..)
                     , GameSlot
                     , Game(Pending, InProgress)
                     , JoinError(..)
                     , Seconds
-                    , Validated(..)
+                    , SlotAction
+                    , SlotAction'
+                    , runSlotAction
+                    , runSlotAction'
                     , creator
                     , createGame
                     , currentPlayer
@@ -46,7 +51,7 @@ module Hazard.Games ( GameCreationError(..)
 import BasicPrelude hiding (round)
 
 import Control.Error
-import Control.Monad.Random (MonadRandom)
+import Control.Monad.Random (MonadRandom, RandomGen, RandT, evalRandT)
 import Control.Monad.State
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..))
 import qualified Data.Map as Map
@@ -59,6 +64,21 @@ import Haverer.Deck (Card(..))
 import Haverer.Player (Player, getDiscards, getHand, isProtected, toPlayers, toPlayerSet)
 import qualified Haverer.Round as Round
 import Haverer.Round (currentPlayer, currentTurn, getPlayers, getPlayerMap, Round, Event(..))
+
+
+data GameError a = GameNotFound Int
+                 | JoinError (JoinError a)
+                 | PlayError (PlayError a)
+                 deriving (Show)
+
+data JoinError a = AlreadyStarted
+                 | AlreadyJoined a
+                 deriving (Eq, Show)
+
+data PlayError a = NotStarted
+                 | PlayNotSpecified
+                 | BadAction (Round.BadAction a)
+                 deriving (Show)
 
 
 type Seconds = Int
@@ -272,7 +292,18 @@ getRound InProgress { rounds = rounds } i = atMay rounds i
 getRound _ _ = Nothing
 
 
-data JoinError a = AlreadyStarted | AlreadyJoined a deriving (Eq, Show)
+type SlotAction g p a = RandT g (StateT (GameSlot p) (Either (GameError p))) a
+
+type SlotAction' p a = StateT (GameSlot p) (Either (GameError p)) a
+
+
+runSlotAction :: RandomGen g => SlotAction g p a -> g -> GameSlot p -> Either (GameError p) (a, GameSlot p)
+runSlotAction action gen = runSlotAction' (evalRandT action gen)
+
+
+runSlotAction' :: SlotAction' p a -> GameSlot p -> Either (GameError p) (a, GameSlot p)
+runSlotAction' = runStateT
+
 
 joinGame :: (MonadRandom m, Show a, Ord a) => GameSlot a -> a -> Either (JoinError a) (m (GameSlot a))
 joinGame slot p = do
@@ -293,8 +324,6 @@ joinGame' (Pending {..}) p
         numNewPlayers = length newPlayers
         newGame = assertRight "Couldn't make game: " (H.makeGame <$> toPlayerSet newPlayers)
 
-
-data PlayError a = NotStarted | PlayNotSpecified | BadAction (Round.BadAction a) deriving Show
 
 
 playTurn :: (Ord a, Show a) => GameSlot a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round.Result a, GameSlot a)

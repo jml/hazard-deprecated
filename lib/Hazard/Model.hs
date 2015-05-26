@@ -23,14 +23,22 @@ module Hazard.Model (
   , getRound
   ) where
 
-import Control.Concurrent.STM (TVar, newTVar, modifyTVar, readTVar, writeTVar)
+import Control.Concurrent.STM (STM, TVar, atomically, newTVar, modifyTVar, readTVar, writeTVar)
 import Control.Error
-import Control.Monad.STM (STM)
+import Control.Monad.Random
+import Control.Monad.State
 
 import Haverer.Round (Round)
 
 import qualified Hazard.Games as Games
-import Hazard.Games (GameSlot)
+import Hazard.Games (
+  GameSlot,
+  GameError(..),
+  SlotAction,
+  SlotAction',
+  runSlotAction,
+  runSlotAction'
+  )
 import Hazard.Users (UserDB, makeUserDB)
 
 
@@ -71,3 +79,28 @@ setGame hazard i game =
     \games' -> take i games' ++ [game] ++ drop (i+1) games'
 
 
+type SlotResult a = Either (GameError Int) (a, GameSlot Int)
+
+
+modifySlot :: Hazard -> Int -> (GameSlot Int -> SlotResult a) -> STM (SlotResult a)
+modifySlot hazard i f = runEitherT $ do
+  games' <- lift $ readTVar (games hazard)
+  slot <- tryAt (GameNotFound i) games' i
+  (a, slot') <- hoistEither $ f slot
+  lift $ setGame hazard i slot'
+  return (a, slot')
+
+
+applySlotAction :: RandomGen g => Hazard -> Int -> g -> SlotAction g Int a -> STM (SlotResult a)
+applySlotAction hazard i gen action = modifySlot hazard i (runSlotAction action gen)
+
+applySlotAction' :: Hazard -> Int -> SlotAction' Int a -> STM (SlotResult a)
+applySlotAction' hazard i action = modifySlot hazard i (runSlotAction' action)
+
+performSlotAction :: Hazard -> Int -> SlotAction StdGen Int a -> IO (SlotResult a)
+performSlotAction hazard i action = do
+  gen <- newStdGen
+  atomically $ applySlotAction hazard i gen action
+
+performSlotAction' :: Hazard -> Int -> SlotAction' Int a -> IO (SlotResult a)
+performSlotAction' hazard i = atomically . applySlotAction' hazard i
