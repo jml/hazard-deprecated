@@ -176,13 +176,13 @@ spec = with hazardTestApp $ do
 
 
   describe "Playing a game" $ do
-    it "Rounds don't exist for unstarted game" $ do
+    it "Rounds don't exist for unstarted game (GET)" $ do
       game <- makeGameAs "foo" 2
       get (game ++ "/round/0") `shouldRespondWith` 404
 
-    it "Rounds don't exist for unstarted game" $ do
+    it "Rounds don't exist for unstarted game (POST)" $ do
       game <- makeGameAs "foo" 2
-      postAs "foo" (game ++ "/round/0") [json|null|] `shouldRespondWith` 404
+      postAs "foo" (game ++ "/round/0") [json|{card: "priestess"}|] `shouldRespondWith` 404
 
     it "started game is started" $ do
       (game, _) <- makeStartedGame 3
@@ -255,14 +255,14 @@ spec = with hazardTestApp $ do
 
     it "POST when it's not your turn returns error" $ do
       (game, [foo, _, _]) <- makeStartedGame 3
-      postAs (encodeUtf8 foo) (game ++ "/round/0") [json|null|]
+      postAs (encodeUtf8 foo) (game ++ "/round/0") [json|{card: "priestess"}|]
         `shouldRespondWith` [json|{message: "Not your turn",
                                    currentPlayer: 2}|] { matchStatus = 400 }
 
     it "POST when you aren't in the game returns error" $ do
       (game, _) <- makeStartedGame 3
       post "/users" [json|{username: "qux"}|]
-      postAs "qux" (game ++ "/round/0") [json|null|]
+      postAs "qux" (game ++ "/round/0") [json|{card: "priestess"}|]
         `shouldRespondWith` [json|{message: "You are not playing"}|] { matchStatus = 400 }
 
     it "POST does *something*" $ do
