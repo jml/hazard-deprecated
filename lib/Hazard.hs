@@ -47,7 +47,6 @@ import Hazard.Model (
   getRound,
   makeHazard,
   performSlotAction,
-  setGame,
   users
   )
 
@@ -57,6 +56,7 @@ import Hazard.Games (
   JoinError(..),
   GameError(..),
   joinSlot,
+  playSlot,
   roundToJSON,
   validateCreationRequest)
 
@@ -171,7 +171,9 @@ hazardWeb' hazard pwgen = do
        let newGame = createGame creator r
        liftIO $ atomically $ addGame hazard newGame
        setStatus created201
+       -- XXX: Should be actual URL of game
        setHeader "Location" "/game/0"
+       -- XXX: Should be contents of new game
        json (Nothing :: Maybe Int)
 
   get ("game" <//> var) $ \gameId -> do
@@ -211,17 +213,12 @@ hazardWeb' hazard pwgen = do
                             "currentPlayer" .= Games.currentPlayer round'])
        | otherwise ->
            do playRequest <- expectJSON
-              game <- liftIO $ atomically $ getGameSlot hazard gameId
-              case game of
-               Nothing -> error "Found round but not game. WTF?"
-               Just game' ->
-                 case Games.playTurn game' playRequest of
-                  Left e -> do
-                    setStatus badRequest400
-                    json (object ["message" .= show e])
-                  Right (result, game'') -> do
-                    liftIO $ atomically $ setGame hazard gameId game''
-                    json result
+              result <- liftIO $ performSlotAction hazard gameId (playSlot playRequest)
+              case result of
+               Left e -> do
+                 setStatus badRequest400
+                 json (object ["message" .= show e])
+               Right (result', _) -> json result'
 
 
   userWeb (users hazard) pwgen

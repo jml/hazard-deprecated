@@ -41,7 +41,7 @@ module Hazard.Games ( GameCreationError(..)
                     , joinSlot
                     , numPlayers
                     , players
-                    , playTurn
+                    , playSlot
                     , requestGame
                     , roundToJSON
                     , turnTimeout
@@ -57,8 +57,6 @@ import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 
-import Haverer.Internal.Error
-
 import Haverer (
   Card(..),
   Complete,
@@ -66,6 +64,7 @@ import Haverer (
   Event(..),
   Play(..),
   Player,
+  Result(..),
   Round,
   currentPlayer,
   currentTurn,
@@ -96,6 +95,8 @@ data JoinError a = AlreadyStarted
 data PlayError a = NotStarted
                  | PlayNotSpecified
                  | BadAction (Round.BadAction a)
+                 | NotYourTurn a a
+                 | NotPlaying a
                  deriving (Show)
 
 
@@ -371,18 +372,16 @@ startRound deck g@(InProgress { .. }) =
   return g { rounds = rounds ++ pure (H.newRound' game deck) }
 
 
-
-playTurn :: (Ord a, Show a) => GameSlot a -> Maybe (PlayRequest a) -> Either (PlayError a) (Round.Result a, GameSlot a)
-playTurn slot playRequest = flip runStateT slot $
+playSlot :: (Ord a, Show a) => Maybe (PlayRequest a) -> SlotAction g a (Result a)
+playSlot playRequest = do
+  slot <- get
   case gameState slot of
-   Pending {} -> lift $ Left NotStarted
-   InProgress {..} ->
-     let round = head rounds in
-     do
-       (result, round') <- lift $ fmapL BadAction $ Round.playTurn' round (requestToPlay <$> playRequest)
-       put (slot { gameState = InProgress { game = game, rounds = round':tail rounds } })
-       return result
-
-
-requestToPlay :: PlayRequest a -> (Card, Play a)
-requestToPlay (PlayRequest card p) = (card, p)
+   Pending {} -> throwError NotStarted
+   Ready {} -> throwError NotStarted
+   InProgress {..} -> do
+     let round = head rounds
+     (result, round') <- (lift . lift . fmapL (PlayError . BadAction) . Round.playTurn' round . fmap requestToPlay) playRequest
+     put (slot { gameState = InProgress { game = game, rounds = round':tail rounds } })
+     return result
+  where throwError = lift . lift . fmapL PlayError . Left
+        requestToPlay (PlayRequest card p) = (card, p)

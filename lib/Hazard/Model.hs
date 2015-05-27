@@ -20,7 +20,6 @@ module Hazard.Model (
   , makeHazard
   , performSlotAction
   , users
-  , setGame
   , getRound
   ) where
 
@@ -74,22 +73,22 @@ addGame hazard game = do
   writeTVar allGames (games' ++ [game])
 
 
-setGame :: Hazard -> Int -> GameSlot Int -> STM ()
-setGame hazard i game =
-  modifyTVar (games hazard) $
-    \games' -> take i games' ++ [game] ++ drop (i+1) games'
-
 
 type SlotResult a = Either (GameError Int) (a, GameSlot Int)
 
 
 modifySlot :: Hazard -> Int -> (GameSlot Int -> SlotResult a) -> STM (SlotResult a)
 modifySlot hazard i f = runEitherT $ do
-  games' <- lift $ readTVar (games hazard)
+  games' <- lift $ readTVar slotVar
   slot <- tryAt (GameNotFound i) games' i
   (a, slot') <- hoistEither $ f slot
-  lift $ setGame hazard i slot'
+  lift $ setGame slot'
   return (a, slot')
+  where
+    slotVar = games hazard
+    setGame game =
+      modifyTVar slotVar $
+      \games' -> take i games' ++ [game] ++ drop (i+1) games'
 
 
 applySlotAction :: RandomGen g => Hazard -> Int -> g -> SlotAction g Int a -> STM (SlotResult a)
