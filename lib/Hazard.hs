@@ -25,6 +25,7 @@ module Hazard ( makeHazard
 
 import BasicPrelude hiding (round)
 
+import Control.Error
 import Control.Monad.Random (evalRandIO)
 import Control.Monad.STM (atomically)
 
@@ -46,19 +47,24 @@ import Hazard.Model (
   getGames,
   getRound,
   makeHazard,
+  applySlotAction',
   performSlotAction,
+  runSlotAction',
+  tryGetSlot,
   users
   )
 
-import qualified Hazard.Games as Games
 import Hazard.Games (
   createGame,
   JoinError(..),
   GameError(..),
+  PlayError(..),
   joinSlot,
   playSlot,
   roundToJSON,
-  validateCreationRequest)
+  validateCreationRequest,
+  validatePlayRequest
+  )
 
 import Hazard.Users (
   UserDB,
@@ -200,25 +206,32 @@ hazardWeb' hazard pwgen = do
 
   post ("game" <//> var <//> "round" <//> var) $ \gameId roundId -> do
     poster <- loggedInUser (users hazard)
-    round <- liftIO $ atomically $ getRound hazard gameId roundId
-    case round of
-     Nothing -> errorMessage notFound404 ("no such round" :: Text)
-     Just round'
-       | poster `notElem` Games.getPlayers round' ->
-           do setStatus badRequest400
-              json (object ["message" .= ("You are not playing" :: Text)])
-       | Just poster /= Games.currentPlayer round' ->
-           do setStatus badRequest400
-              json (object ["message" .= ("Not your turn" :: Text),
-                            "currentPlayer" .= Games.currentPlayer round'])
-       | otherwise ->
-           do playRequest <- expectJSON
-              result <- liftIO $ performSlotAction hazard gameId (playSlot playRequest)
-              case result of
-               Left e -> do
-                 setStatus badRequest400
-                 json (object ["message" .= show e])
-               Right (result', _) -> json result'
+    playRequest <- expectJSON
+
+    result <- liftIO $ atomically $ runEitherT $ do
+      slot <- tryGetSlot hazard gameId
+      -- XXX: Use types to enforce validated play requests
+      let validation = validatePlayRequest poster roundId playRequest
+      playRequest' <- hoistEither $ fst <$> runSlotAction' validation slot
+      result <- lift $ applySlotAction' hazard gameId (playSlot playRequest')
+      hoistEither $ fst <$> result
+
+    case result of
+     Left (GameNotFound {}) ->
+       errorMessage notFound404 ("no such game" :: Text)
+     Left (PlayError (RoundNotFound {})) ->
+       errorMessage notFound404 ("no such round" :: Text)
+     Left (PlayError (NotYourTurn _ current)) -> do
+       setStatus badRequest400
+       json (object ["message" .= ("Not your turn" :: Text),
+                     "currentPlayer" .= current])
+     Left (PlayError (NotInGame _)) -> do
+       setStatus badRequest400
+       json (object ["message" .= ("You are not playing" :: Text)])
+     Left (PlayError (RoundNotActive {})) -> do
+       setStatus badRequest400
+       json (object ["message" .= ("Round not active" :: Text)])
+     Right result' -> json result'
 
 
   userWeb (users hazard) pwgen

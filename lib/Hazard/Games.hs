@@ -27,6 +27,7 @@ module Hazard.Games ( GameCreationError(..)
                     , GameSlot
                     , Game(Pending, InProgress)
                     , JoinError(..)
+                    , PlayError(..)
                     , Seconds
                     , SlotAction
                     , SlotAction'
@@ -46,6 +47,7 @@ module Hazard.Games ( GameCreationError(..)
                     , roundToJSON
                     , turnTimeout
                     , validateCreationRequest
+                    , validatePlayRequest
                     ) where
 
 import BasicPrelude hiding (round)
@@ -96,7 +98,9 @@ data PlayError a = NotStarted
                  | PlayNotSpecified
                  | BadAction (Round.BadAction a)
                  | NotYourTurn a a
-                 | NotPlaying a
+                 | NotInGame a
+                 | RoundNotFound Int
+                 | RoundNotActive
                  deriving (Show)
 
 
@@ -372,7 +376,19 @@ startRound deck g@(InProgress { .. }) =
   return g { rounds = rounds ++ pure (H.newRound' game deck) }
 
 
-playSlot :: (Ord a, Show a) => Maybe (PlayRequest a) -> SlotAction g a (Result a)
+validatePlayRequest :: Eq a => a -> Int -> Maybe (PlayRequest a) -> SlotAction' a (Maybe (PlayRequest a))
+validatePlayRequest player roundId request = do
+  game <- gameState <$> get
+  round <- lift $ note (PlayError (RoundNotFound roundId)) (getRound game roundId)
+  unless (player `elem` getPlayers round) (throwError (NotInGame player))
+  current <- lift $ note (PlayError RoundNotActive) (currentPlayer round)
+  unless (player == current) (throwError (NotYourTurn player current))
+  return request
+
+  where throwError = lift . fmapL PlayError . Left
+
+
+playSlot :: (Ord a, Show a) => Maybe (PlayRequest a) -> SlotAction' a (Result a)
 playSlot playRequest = do
   slot <- get
   case gameState slot of
@@ -380,8 +396,8 @@ playSlot playRequest = do
    Ready {} -> throwError NotStarted
    InProgress {..} -> do
      let round = head rounds
-     (result, round') <- (lift . lift . fmapL (PlayError . BadAction) . Round.playTurn' round . fmap requestToPlay) playRequest
+     (result, round') <- (lift . fmapL (PlayError . BadAction) . Round.playTurn' round . fmap requestToPlay) playRequest
      put (slot { gameState = InProgress { game = game, rounds = round':tail rounds } })
      return result
-  where throwError = lift . lift . fmapL PlayError . Left
+  where throwError = lift . fmapL PlayError . Left
         requestToPlay (PlayRequest card p) = (card, p)
