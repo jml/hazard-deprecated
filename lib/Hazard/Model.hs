@@ -21,6 +21,7 @@ module Hazard.Model (
   , performSlotAction
   , users
   , getRound
+  , tryGetSlot
   ) where
 
 import Control.Concurrent.STM (STM, TVar, atomically, newTVar, modifyTVar, readTVar, writeTVar)
@@ -61,6 +62,12 @@ getGameSlot hazard i = do
   return $ atMay games' i
 
 
+tryGetSlot :: Hazard -> Int -> EitherT (GameError Int) STM (GameSlot Int)
+tryGetSlot hazard i = do
+  games' <- lift $ readTVar (games hazard)
+  tryAt (GameNotFound i) games' i
+
+
 getRound :: Hazard -> Int -> Int -> STM (Maybe (Round Int))
 getRound hazard i j =
   (fmap . (=<<)) (flip Games.getRound j . Games.gameState) (getGameSlot hazard i)
@@ -79,8 +86,7 @@ type SlotResult a = Either (GameError Int) (a, GameSlot Int)
 
 modifySlot :: Hazard -> Int -> (GameSlot Int -> SlotResult a) -> STM (SlotResult a)
 modifySlot hazard i f = runEitherT $ do
-  games' <- lift $ readTVar slotVar
-  slot <- tryAt (GameNotFound i) games' i
+  slot <- tryGetSlot hazard i
   (a, slot') <- hoistEither $ f slot
   lift $ setGame slot'
   return (a, slot')
