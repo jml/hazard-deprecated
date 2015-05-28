@@ -329,6 +329,18 @@ runSlotAction' :: SlotAction' e p a -> GameSlot p -> Either (GameError e) (a, Ga
 runSlotAction' = runStateT
 
 
+liftEither :: MonadTrans t => Either e a -> t (Either (GameError e)) a
+liftEither = lift . fmapL OtherError
+
+
+liftMaybe :: MonadTrans t => e -> Maybe a -> t (Either (GameError e)) a
+liftMaybe e = liftEither . note e
+
+
+throwError :: MonadTrans t => e -> t (Either (GameError e)) a
+throwError = liftEither . Left
+
+
 modifyGame :: (Game a -> RandT g (Either (GameError e)) (Game a)) -> SlotAction e g a ()
 modifyGame f = do
   slot <- get
@@ -378,13 +390,11 @@ startRound deck g@(InProgress { .. }) =
 validatePlayRequest :: Eq a => a -> Int -> Maybe (PlayRequest a) -> SlotAction' (PlayError a) a (Maybe (PlayRequest a))
 validatePlayRequest player roundId request = do
   game <- gameState <$> get
-  round <- lift $ note (OtherError (RoundNotFound roundId)) (getRound game roundId)
+  round <- liftMaybe (RoundNotFound roundId) (getRound game roundId)
   unless (player `elem` getPlayers round) (throwError (NotInGame player))
-  current <- lift $ note (OtherError RoundNotActive) (currentPlayer round)
+  current <- liftMaybe RoundNotActive (currentPlayer round)
   unless (player == current) (throwError (NotYourTurn player current))
   return request
-
-  where throwError = lift . fmapL OtherError . Left
 
 
 playSlot :: (Ord a, Show a) => Maybe (PlayRequest a) -> SlotAction' (PlayError a) a (Result a)
@@ -395,8 +405,8 @@ playSlot playRequest = do
    Ready {} -> throwError NotStarted
    InProgress {..} -> do
      let round = head rounds
-     (result, round') <- (lift . fmapL (OtherError . BadAction) . Round.playTurn' round . fmap requestToPlay) playRequest
+     (result, round') <- playTurnOn round playRequest
      put (slot { gameState = InProgress { game = game, rounds = round':tail rounds } })
      return result
-  where throwError = lift . fmapL OtherError . Left
-        requestToPlay (PlayRequest card p) = (card, p)
+  where requestToPlay (PlayRequest card p) = (card, p)
+        playTurnOn round = liftEither . fmapL BadAction . Round.playTurn' round . fmap requestToPlay
