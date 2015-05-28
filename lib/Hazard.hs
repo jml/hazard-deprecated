@@ -193,7 +193,7 @@ hazardWeb' hazard pwgen = do
     result <- liftIO $ performSlotAction hazard gameId (joinSlot joiner)
     case result of
      Left (GameNotFound _) -> errorMessage notFound404 ("no such game" :: Text)
-     Left (JoinError AlreadyStarted) -> badRequest ("Game already started" :: Text)
+     Left (OtherError AlreadyStarted) -> badRequest ("Game already started" :: Text)
      Left e -> terror $ show e
      Right (_, game) -> json game
 
@@ -219,16 +219,16 @@ hazardWeb' hazard pwgen = do
     case result of
      Left (GameNotFound {}) ->
        errorMessage notFound404 ("no such game" :: Text)
-     Left (PlayError (RoundNotFound {})) ->
+     Left (OtherError (RoundNotFound {})) ->
        errorMessage notFound404 ("no such round" :: Text)
-     Left (PlayError (NotYourTurn _ current)) -> do
+     Left (OtherError (NotYourTurn _ current)) -> do
        setStatus badRequest400
        json (object ["message" .= ("Not your turn" :: Text),
                      "currentPlayer" .= current])
-     Left (PlayError (NotInGame _)) -> do
+     Left (OtherError (NotInGame _)) -> do
        setStatus badRequest400
        json (object ["message" .= ("You are not playing" :: Text)])
-     Left (PlayError (RoundNotActive {})) -> do
+     Left (OtherError (RoundNotActive {})) -> do
        setStatus badRequest400
        json (object ["message" .= ("Round not active" :: Text)])
      Right result' -> json result'

@@ -65,7 +65,7 @@ getGameSlot hazard i = do
   return $ atMay games' i
 
 
-tryGetSlot :: Hazard -> Int -> EitherT (GameError Int) STM (GameSlot Int)
+tryGetSlot :: Hazard -> Int -> EitherT (GameError e) STM (GameSlot Int)
 tryGetSlot hazard i = do
   games' <- lift $ readTVar (games hazard)
   tryAt (GameNotFound i) games' i
@@ -84,10 +84,10 @@ addGame hazard game = do
 
 
 
-type SlotResult a = Either (GameError Int) (a, GameSlot Int)
+type SlotResult e a = Either (GameError e) (a, GameSlot Int)
 
 
-modifySlot :: Hazard -> Int -> (GameSlot Int -> SlotResult a) -> STM (SlotResult a)
+modifySlot :: Hazard -> Int -> (GameSlot Int -> SlotResult e a) -> STM (SlotResult e a)
 modifySlot hazard i f = runEitherT $ do
   slot <- tryGetSlot hazard i
   (a, slot') <- hoistEither $ f slot
@@ -100,16 +100,16 @@ modifySlot hazard i f = runEitherT $ do
       \games' -> take i games' ++ [game] ++ drop (i+1) games'
 
 
-applySlotAction :: RandomGen g => Hazard -> Int -> g -> SlotAction g Int a -> STM (SlotResult a)
+applySlotAction :: RandomGen g => Hazard -> Int -> g -> SlotAction e g Int a -> STM (SlotResult e a)
 applySlotAction hazard i gen action = modifySlot hazard i (runSlotAction action gen)
 
-applySlotAction' :: Hazard -> Int -> SlotAction' Int a -> STM (SlotResult a)
+applySlotAction' :: Hazard -> Int -> SlotAction' e Int a -> STM (SlotResult e a)
 applySlotAction' hazard i action = modifySlot hazard i (runSlotAction' action)
 
-performSlotAction :: Hazard -> Int -> SlotAction StdGen Int a -> IO (SlotResult a)
+performSlotAction :: Hazard -> Int -> SlotAction e StdGen Int a -> IO (SlotResult e a)
 performSlotAction hazard i action = do
   gen <- newStdGen
   atomically $ applySlotAction hazard i gen action
 
-performSlotAction' :: Hazard -> Int -> SlotAction' Int a -> IO (SlotResult a)
+performSlotAction' :: Hazard -> Int -> SlotAction' e Int a -> IO (SlotResult e a)
 performSlotAction' hazard i = atomically . applySlotAction' hazard i

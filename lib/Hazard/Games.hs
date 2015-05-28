@@ -86,8 +86,7 @@ import qualified Haverer.Round as Round
 
 
 data GameError a = GameNotFound Int
-                 | JoinError (JoinError a)
-                 | PlayError (PlayError a)
+                 | OtherError a
                  deriving (Show)
 
 data JoinError a = AlreadyStarted
@@ -317,20 +316,20 @@ getRound InProgress { rounds = rounds } i = atMay rounds i
 getRound _ _ = Nothing
 
 
-type SlotAction g p a = StateT (GameSlot p) (RandT g (Either (GameError p))) a
+type SlotAction e g p a = StateT (GameSlot p) (RandT g (Either (GameError e))) a
 
-type SlotAction' p a = StateT (GameSlot p) (Either (GameError p)) a
+type SlotAction' e p a = StateT (GameSlot p) (Either (GameError e)) a
 
 
-runSlotAction :: RandomGen g => SlotAction g p a -> g -> GameSlot p -> Either (GameError p) (a, GameSlot p)
+runSlotAction :: RandomGen g => SlotAction e g p a -> g -> GameSlot p -> Either (GameError e) (a, GameSlot p)
 runSlotAction action gen slot = evalRandT (runStateT action slot) gen
 
 
-runSlotAction' :: SlotAction' p a -> GameSlot p -> Either (GameError p) (a, GameSlot p)
+runSlotAction' :: SlotAction' e p a -> GameSlot p -> Either (GameError e) (a, GameSlot p)
 runSlotAction' = runStateT
 
 
-modifyGame :: (Game a -> RandT g (Either (GameError a)) (Game a)) -> SlotAction g a ()
+modifyGame :: (Game a -> RandT g (Either (GameError e)) (Game a)) -> SlotAction e g a ()
 modifyGame f = do
   slot <- get
   let game = gameState slot
@@ -338,10 +337,10 @@ modifyGame f = do
   put (slot { gameState = game'' })
 
 
-joinSlot :: (RandomGen g, Ord p, Show p) => p -> SlotAction g p ()
+joinSlot :: (RandomGen g, Ord p, Show p) => p -> SlotAction (JoinError p) g p ()
 joinSlot p = modifyGame $ \game ->
   do
-    game' <- (lift . fmapL JoinError . joinGame p) game
+    game' <- (lift . fmapL OtherError . joinGame p) game
     case game' of
      Ready playerSet -> do
        deck <- newDeck
@@ -376,19 +375,19 @@ startRound deck g@(InProgress { .. }) =
   return g { rounds = rounds ++ pure (H.newRound' game deck) }
 
 
-validatePlayRequest :: Eq a => a -> Int -> Maybe (PlayRequest a) -> SlotAction' a (Maybe (PlayRequest a))
+validatePlayRequest :: Eq a => a -> Int -> Maybe (PlayRequest a) -> SlotAction' (PlayError a) a (Maybe (PlayRequest a))
 validatePlayRequest player roundId request = do
   game <- gameState <$> get
-  round <- lift $ note (PlayError (RoundNotFound roundId)) (getRound game roundId)
+  round <- lift $ note (OtherError (RoundNotFound roundId)) (getRound game roundId)
   unless (player `elem` getPlayers round) (throwError (NotInGame player))
-  current <- lift $ note (PlayError RoundNotActive) (currentPlayer round)
+  current <- lift $ note (OtherError RoundNotActive) (currentPlayer round)
   unless (player == current) (throwError (NotYourTurn player current))
   return request
 
-  where throwError = lift . fmapL PlayError . Left
+  where throwError = lift . fmapL OtherError . Left
 
 
-playSlot :: (Ord a, Show a) => Maybe (PlayRequest a) -> SlotAction' a (Result a)
+playSlot :: (Ord a, Show a) => Maybe (PlayRequest a) -> SlotAction' (PlayError a) a (Result a)
 playSlot playRequest = do
   slot <- get
   case gameState slot of
@@ -396,8 +395,8 @@ playSlot playRequest = do
    Ready {} -> throwError NotStarted
    InProgress {..} -> do
      let round = head rounds
-     (result, round') <- (lift . fmapL (PlayError . BadAction) . Round.playTurn' round . fmap requestToPlay) playRequest
+     (result, round') <- (lift . fmapL (OtherError . BadAction) . Round.playTurn' round . fmap requestToPlay) playRequest
      put (slot { gameState = InProgress { game = game, rounds = round':tail rounds } })
      return result
-  where throwError = lift . fmapL PlayError . Left
+  where throwError = lift . fmapL OtherError . Left
         requestToPlay (PlayRequest card p) = (card, p)
