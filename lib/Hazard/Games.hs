@@ -382,13 +382,6 @@ makeGame deck playerSet = do
   InProgress { game = game, rounds = pure round }
 
 
-startRound :: (Ord a, Show a) => Deck Complete -> Game a -> Either (PlayError a) (Game a)
-startRound _ (Pending {}) = throwError NotStarted
-startRound _ (Ready {}) = throwError NotStarted
-startRound deck g@(InProgress { .. }) =
-  return g { rounds = rounds ++ pure (H.newRound' game deck) }
-
-
 validatePlayRequest :: Eq a => a -> Int -> Maybe (PlayRequest a) -> SlotAction' (PlayError a) a (Maybe (PlayRequest a))
 validatePlayRequest player roundId request = do
   game <- gameState <$> get
