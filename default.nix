@@ -1,7 +1,7 @@
 { mkDerivation, aeson, base, base64-bytestring, basic-prelude
 , bytestring, containers, errors, haverer, hspec-wai, hspec-wai-json
-, http-types, MonadRandom, random, Spock, stdenv, stm, tasty, tasty-hspec
-, tasty-quickcheck, text, transformers, wai, wai-extra
+, http-types, lens, MonadRandom, mtl, random, Spock, stdenv, stm, tasty
+, tasty-hspec, tasty-quickcheck, text, transformers, wai, wai-extra
 }:
 mkDerivation {
   pname = "hazard";
@@ -11,7 +11,7 @@ mkDerivation {
   isExecutable = true;
   buildDepends = [
     aeson base basic-prelude bytestring containers errors haverer http-types
-    MonadRandom random Spock stm text transformers wai wai-extra
+    lens MonadRandom mtl random Spock stm text transformers wai wai-extra
   ];
   testDepends = [
     aeson base basic-prelude base64-bytestring bytestring errors haverer

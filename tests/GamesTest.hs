@@ -21,7 +21,6 @@ module GamesTest (suite) where
 
 import BasicPrelude
 
-import Control.Monad.Random (evalRand)
 import Data.Aeson
 import Data.Aeson.Types (parseEither)
 import System.Random (mkStdGen)
@@ -39,10 +38,11 @@ import Hazard.Games (GameCreationRequest(..),
                      createGame,
                      creator,
                      gameState,
-                     joinGame,
+                     joinSlot,
                      numPlayers,
                      players,
                      requestGame,
+                     runSlotAction,
                      turnTimeout,
                      validateCreationRequest)
 
@@ -90,9 +90,7 @@ addPlayers n g =
   where
     addPlayer g' = do
       p <- arbitrary `suchThat` (`notElem` players g')
-      case joinGame g' p of
-       Left e -> terror $ show e
-       Right r -> return (evalRand r (mkStdGen 42))
+      return $ snd $ assertRight' (runSlotAction (joinSlot p) (mkStdGen 42) g')
 
 
 prop_creatorInPlayers :: Eq a => GameSlot a -> Bool

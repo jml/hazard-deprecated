@@ -16,6 +16,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Hazard.Users ( UserDB
+                    , UserID
                     , addUser
                     , authenticate
                     , getUserByID
@@ -40,6 +41,9 @@ import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 -- XXX: Stored as username / password. Password is in the clear, which is
 -- terrible.
 data User = User ByteString ByteString
+
+type UserID = Int
+
 
 instance ToJSON User where
   toJSON (User u _) = object ["username" .= decodeUtf8 u]
@@ -67,7 +71,7 @@ usernames = fmap (map username) . readTVar . unUserDB
             where username (User u _) = u
 
 
-getUserByID :: UserDB -> Int -> STM (Maybe User)
+getUserByID :: UserDB -> UserID -> STM (Maybe User)
 getUserByID userDB i = do
   allUsers <- readTVar (unUserDB userDB)
   return $ atMay allUsers i
@@ -79,7 +83,7 @@ getUserByName userDB username = do
   return $ find (\(User u _) -> u == username) allUsers
 
 
-getUserIDByName :: UserDB -> ByteString -> STM (Maybe Int)
+getUserIDByName :: UserDB -> ByteString -> STM (Maybe UserID)
 getUserIDByName userDB username = do
   allUsers <- readTVar (unUserDB userDB)
   return $ findIndex (\(User u _) -> u == username) allUsers
@@ -96,7 +100,7 @@ authenticate userDB username password = do
      | otherwise -> Nothing
 
 
-addUser :: UserDB -> UserCreationRequest -> ByteString -> STM (Maybe Int)
+addUser :: UserDB -> UserCreationRequest -> ByteString -> STM (Maybe UserID)
 addUser userDB req password =
   let username = encodeUtf8 (reqUsername req)
       newUser = User username password

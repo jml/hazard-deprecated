@@ -25,6 +25,7 @@ module Hazard ( makeHazard
 
 import BasicPrelude hiding (round)
 
+import Control.Error
 import Control.Monad.Random (evalRandIO)
 import Control.Monad.STM (atomically)
 
@@ -46,20 +47,28 @@ import Hazard.Model (
   getGames,
   getRound,
   makeHazard,
-  setGame,
+  applySlotAction',
+  performSlotAction,
+  runSlotAction',
+  tryGetSlot,
   users
   )
 
-import qualified Hazard.Games as Games
 import Hazard.Games (
   createGame,
   JoinError(..),
-  joinGame,
+  GameError(..),
+  PlayError(..),
+  joinSlot,
+  playSlot,
   roundToJSON,
-  validateCreationRequest)
+  validateCreationRequest,
+  validatePlayRequest
+  )
 
 import Hazard.Users (
   UserDB,
+  UserID,
   addUser,
   authenticate,
   getUserByID,
@@ -130,7 +139,7 @@ authUserDB userDB username password = do
   return (isJust found)
 
 
-maybeLoggedInUser :: MonadIO m => UserDB -> ActionT m (Maybe Int)
+maybeLoggedInUser :: MonadIO m => UserDB -> ActionT m (Maybe UserID)
 maybeLoggedInUser userDB = do
   req <- request
   case maybeLoggedIn req of
@@ -138,7 +147,7 @@ maybeLoggedInUser userDB = do
    Nothing -> return Nothing
 
 
-loggedInUser :: MonadIO m => UserDB -> ActionT m Int
+loggedInUser :: MonadIO m => UserDB -> ActionT m UserID
 loggedInUser userDB = do
   maybeUser <- maybeLoggedInUser userDB
   case maybeUser of
@@ -168,7 +177,9 @@ hazardWeb' hazard pwgen = do
        let newGame = createGame creator r
        liftIO $ atomically $ addGame hazard newGame
        setStatus created201
+       -- XXX: Should be actual URL of game
        setHeader "Location" "/game/0"
+       -- XXX: Should be contents of new game
        json (Nothing :: Maybe Int)
 
   get ("game" <//> var) $ \gameId -> do
@@ -179,20 +190,12 @@ hazardWeb' hazard pwgen = do
 
   post ("game" <//> var) $ \gameId -> do
     joiner <- loggedInUser (users hazard)
-    -- XXX: Here and elsewhere, our concurrency model is completely wrong,
-    -- since the game (or round, or whatever) can be modified between the
-    -- first 'atomically' and the second 'atomically'.
-    game <- liftIO $ atomically $ getGameSlot hazard gameId
-    case game of
-     Nothing -> errorMessage notFound404 ("no such game" :: Text)
-     Just game' ->
-       case joinGame game' joiner of
-        Left AlreadyJoined -> json game'
-        Left AlreadyStarted -> badRequest ("Game already started" :: Text)
-        Right r -> do
-          game'' <- liftIO $ evalRandIO r
-          liftIO $ atomically $ setGame hazard gameId game''
-          json game''
+    result <- liftIO $ performSlotAction hazard gameId (joinSlot joiner)
+    case result of
+     Left (GameNotFound _) -> errorMessage notFound404 ("no such game" :: Text)
+     Left (OtherError AlreadyStarted) -> badRequest ("Game already started" :: Text)
+     Left e -> terror $ show e
+     Right (_, game) -> json game
 
   get ("game" <//> var <//> "round" <//> var) $ \gameId roundId -> do
     viewer <- maybeLoggedInUser (users hazard)
@@ -203,30 +206,35 @@ hazardWeb' hazard pwgen = do
 
   post ("game" <//> var <//> "round" <//> var) $ \gameId roundId -> do
     poster <- loggedInUser (users hazard)
-    round <- liftIO $ atomically $ getRound hazard gameId roundId
-    case round of
-     Nothing -> errorMessage notFound404 ("no such round" :: Text)
-     Just round'
-       | poster `notElem` Games.getPlayers round' ->
-           do setStatus badRequest400
-              json (object ["message" .= ("You are not playing" :: Text)])
-       | Just poster /= Games.currentPlayer round' ->
-           do setStatus badRequest400
-              json (object ["message" .= ("Not your turn" :: Text),
-                            "currentPlayer" .= Games.currentPlayer round'])
-       | otherwise ->
-           do playRequest <- expectJSON
-              game <- liftIO $ atomically $ getGameSlot hazard gameId
-              case game of
-               Nothing -> error "Found round but not game. WTF?"
-               Just game' ->
-                 case Games.playTurn game' playRequest of
-                  Left e -> do
-                    setStatus badRequest400
-                    json (object ["message" .= show e])
-                  Right (game'', result) -> do
-                    liftIO $ atomically $ setGame hazard gameId game''
-                    json result
+    playRequest <- expectJSON
+
+    result <- liftIO $ atomically $ runEitherT $ do
+      slot <- tryGetSlot hazard gameId
+      -- XXX: Use types to enforce validated play requests
+      let validation = validatePlayRequest poster roundId playRequest
+      playRequest' <- hoistEither $ fst <$> runSlotAction' validation slot
+      result <- lift $ applySlotAction' hazard gameId (playSlot playRequest')
+      hoistEither $ fst <$> result
+
+    case result of
+     Left (GameNotFound {}) ->
+       errorMessage notFound404 ("no such game" :: Text)
+     Left (OtherError (RoundNotFound {})) ->
+       errorMessage notFound404 ("no such round" :: Text)
+     Left (OtherError (NotYourTurn _ current)) -> do
+       setStatus badRequest400
+       json (object ["message" .= ("Not your turn" :: Text),
+                     "currentPlayer" .= current])
+     Left (OtherError (NotInGame _)) -> do
+       setStatus badRequest400
+       json (object ["message" .= ("You are not playing" :: Text)])
+     Left (OtherError (RoundNotActive {})) -> do
+       setStatus badRequest400
+       json (object ["message" .= ("Round not active" :: Text)])
+     Left (OtherError e) -> do
+       setStatus badRequest400
+       json (object ["message" .= show e])
+     Right result' -> json result'
 
 
   userWeb (users hazard) pwgen
