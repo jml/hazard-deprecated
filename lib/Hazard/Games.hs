@@ -190,6 +190,7 @@ instance ToJSON a => ToJSON (GameSlot a) where
       specificFields =
         case gameState slot of
          Pending {} -> ["state" .= ("pending" :: Text)]
+         Ready {} -> ["state" .= ("pending" :: Text)]
          InProgress {} -> [ "state" .= ("in-progress" :: Text)
                           , "scores" .= replicate (length (players slot)) (0 :: Int)
                           ]
@@ -302,6 +303,7 @@ numPlayers :: GameSlot a -> Int
 numPlayers =
   numPlayers' . gameState
   where numPlayers' (Pending { _numPlayers = _numPlayers }) = _numPlayers
+        numPlayers' (Ready { _playerSet = _playerSet }) = (length . toPlayers) _playerSet
         numPlayers' (InProgress { game = game' }) = (length . toPlayers . H.players) game'
 
 

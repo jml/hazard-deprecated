@@ -231,6 +231,9 @@ hazardWeb' hazard pwgen = do
      Left (OtherError (RoundNotActive {})) -> do
        setStatus badRequest400
        json (object ["message" .= ("Round not active" :: Text)])
+     Left (OtherError e) -> do
+       setStatus badRequest400
+       json (object ["message" .= show e])
      Right result' -> json result'
 
 
