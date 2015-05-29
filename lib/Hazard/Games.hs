@@ -162,10 +162,9 @@ instance FromJSON a => FromJSON (PlayRequest a) where
   parseJSON _ = mzero
 
 
--- XXX: I'm ambivalent about having GameSlot & Game. The idea is that the
--- fields in GameSlot are all metadata, and entirely irrelevant to the "rules"
--- bit in gameState.
-
+-- | Represents a single game.
+--
+-- Pretty much all of the interesting state about the game is in 'Game'.
 data GameSlot a = GameSlot {
   turnTimeout :: Seconds,
   creator :: a,

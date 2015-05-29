@@ -152,7 +152,7 @@ loggedInUser userDB = do
   maybeUser <- maybeLoggedInUser userDB
   case maybeUser of
    Just user -> return user
-   -- XXX: Really ought to raise some kind of error.
+   -- TODO: Raise "authentication required" error.
    Nothing -> error "No user logged in"
 
 
@@ -172,14 +172,14 @@ hazardWeb' hazard pwgen = do
     creator <- loggedInUser (users hazard)
     gameRequest <- expectJSON
     case validateCreationRequest gameRequest of
-     Left e -> terror $ show e  -- XXX: Should be bad request
+     Left e -> terror $ show e  -- TODO: Return "bad request"
      Right r -> do
        let newGame = createGame creator r
        liftIO $ atomically $ addGame hazard newGame
        setStatus created201
-       -- XXX: Should be actual URL of game
+       -- TODO: Return actual URL of game
        setHeader "Location" "/game/0"
-       -- XXX: Should be contents of new game
+       -- TODO: Return contents of new game
        json (Nothing :: Maybe Int)
 
   get ("game" <//> var) $ \gameId -> do
@@ -210,7 +210,7 @@ hazardWeb' hazard pwgen = do
 
     result <- liftIO $ atomically $ runEitherT $ do
       slot <- tryGetSlot hazard gameId
-      -- XXX: Use types to enforce validated play requests
+      -- TODO: Use types to enforce validated play requests
       let validation = validatePlayRequest poster roundId playRequest
       playRequest' <- hoistEither $ fst <$> runSlotAction' validation slot
       result <- lift $ applySlotAction' hazard gameId (playSlot playRequest')

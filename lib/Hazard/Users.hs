@@ -38,8 +38,8 @@ import System.Random (RandomGen)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
 
 
--- XXX: Stored as username / password. Password is in the clear, which is
--- terrible.
+-- TODO: Stored as username / password. Password is in the clear, which is
+-- terrible.  jml/hazard#4
 data User = User ByteString ByteString
 
 type UserID = Int
@@ -60,8 +60,6 @@ instance FromJSON UserCreationRequest where
 
 newtype UserDB = UserDB { unUserDB :: TVar [User] }
 
--- XXX: I feel like there's a monad-transformer way of writing user db that
--- would make it more composeable.
 
 makeUserDB :: STM UserDB
 makeUserDB = UserDB <$> newTVar []
@@ -87,7 +85,6 @@ getUserIDByName :: UserDB -> ByteString -> STM (Maybe UserID)
 getUserIDByName userDB username = do
   allUsers <- readTVar (unUserDB userDB)
   return $ findIndex (\(User u _) -> u == username) allUsers
-
 
 
 authenticate :: UserDB -> ByteString -> ByteString -> STM (Maybe User)
