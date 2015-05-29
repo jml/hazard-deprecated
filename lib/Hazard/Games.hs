@@ -13,6 +13,7 @@
 -- limitations under the License.
 
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -53,6 +54,7 @@ module Hazard.Games ( GameCreationError(..)
 import BasicPrelude hiding (round)
 
 import Control.Error
+import Control.Monad.Except
 import Control.Monad.Random
 import Control.Monad.State
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..))
@@ -134,12 +136,12 @@ requestGame :: Int -> Seconds -> GameCreationRequest 'Unchecked
 requestGame = GameCreationRequest
 
 
-validateCreationRequest :: GameCreationRequest 'Unchecked -> Either GameCreationError (GameCreationRequest 'Valid)
+validateCreationRequest :: MonadError GameCreationError m => GameCreationRequest 'Unchecked -> m (GameCreationRequest 'Valid)
 validateCreationRequest (GameCreationRequest { .. })
-  | reqTurnTimeout <= 0 = Left $ InvalidTurnTimeout reqTurnTimeout
-  | reqNumPlayers < 2 = Left $ InvalidNumberOfPlayers reqNumPlayers
-  | reqNumPlayers > 4 = Left $ InvalidNumberOfPlayers reqNumPlayers
-  | otherwise = Right $ GameCreationRequest reqNumPlayers reqTurnTimeout
+  | reqTurnTimeout <= 0 = throwError $ InvalidTurnTimeout reqTurnTimeout
+  | reqNumPlayers < 2 = throwError $ InvalidNumberOfPlayers reqNumPlayers
+  | reqNumPlayers > 4 = throwError $ InvalidNumberOfPlayers reqNumPlayers
+  | otherwise = return $ GameCreationRequest reqNumPlayers reqTurnTimeout
 
 
 data PlayRequest a = PlayRequest Card (Play a) deriving (Eq, Show)
@@ -337,8 +339,8 @@ liftMaybe :: MonadTrans t => e -> Maybe a -> t (Either (GameError e)) a
 liftMaybe e = liftEither . note e
 
 
-throwError :: MonadTrans t => e -> t (Either (GameError e)) a
-throwError = liftEither . Left
+throwOtherError :: MonadError (GameError e) m => e -> m a
+throwOtherError = throwError . OtherError
 
 
 modifyGame :: (Game a -> RandT g (Either (GameError e)) (Game a)) -> SlotAction e g a ()
@@ -352,7 +354,7 @@ modifyGame f = do
 joinSlot :: (RandomGen g, Ord p, Show p) => p -> SlotAction (JoinError p) g p ()
 joinSlot p = modifyGame $ \game ->
   do
-    game' <- (lift . fmapL OtherError . joinGame p) game
+    game' <- (liftEither . joinGame p) game
     case game' of
      Ready playerSet -> do
        deck <- newDeck
@@ -361,8 +363,8 @@ joinSlot p = modifyGame $ \game ->
 
 
 joinGame :: (Show a, Ord a) => a -> Game a -> Either (JoinError a) (Game a)
-joinGame _ (InProgress {}) = Left AlreadyStarted
-joinGame _ (Ready {}) = Left AlreadyStarted
+joinGame _ (InProgress {}) = throwError AlreadyStarted
+joinGame _ (Ready {}) = throwError AlreadyStarted
 joinGame p g@(Pending {..})
   | p `elem` _players = return g
   | numNewPlayers == _numPlayers =
@@ -381,8 +383,8 @@ makeGame deck playerSet = do
 
 
 startRound :: (Ord a, Show a) => Deck Complete -> Game a -> Either (PlayError a) (Game a)
-startRound _ (Pending {}) = Left NotStarted
-startRound _ (Ready {}) = Left NotStarted
+startRound _ (Pending {}) = throwError NotStarted
+startRound _ (Ready {}) = throwError NotStarted
 startRound deck g@(InProgress { .. }) =
   return g { rounds = rounds ++ pure (H.newRound' game deck) }
 
@@ -391,9 +393,9 @@ validatePlayRequest :: Eq a => a -> Int -> Maybe (PlayRequest a) -> SlotAction' 
 validatePlayRequest player roundId request = do
   game <- gameState <$> get
   round <- liftMaybe (RoundNotFound roundId) (getRound game roundId)
-  unless (player `elem` getPlayers round) (throwError (NotInGame player))
+  unless (player `elem` getPlayers round) (throwOtherError (NotInGame player))
   current <- liftMaybe RoundNotActive (currentPlayer round)
-  unless (player == current) (throwError (NotYourTurn player current))
+  unless (player == current) (throwOtherError (NotYourTurn player current))
   return request
 
 
@@ -401,8 +403,8 @@ playSlot :: (Ord a, Show a) => Maybe (PlayRequest a) -> SlotAction' (PlayError a
 playSlot playRequest = do
   slot <- get
   case gameState slot of
-   Pending {} -> throwError NotStarted
-   Ready {} -> throwError NotStarted
+   Pending {} -> throwOtherError NotStarted
+   Ready {} -> throwOtherError NotStarted
    InProgress {..} -> do
      let round = head rounds
      (result, round') <- playTurnOn round playRequest
