@@ -124,13 +124,17 @@ userWeb userDB pwgen = do
      Just user' -> json user'
      Nothing -> errorMessage notFound404 ("no such user" :: Text)
 
-  where isProtected req = return $ case (requestMethod req, pathInfo req) of
-          -- XXX: Alter this to be default POST requires auth, except
-          -- registering users, and all others don't need auth
-          (_, "user":_) -> True
-          ("POST", "games":_) -> True
-          ("POST", "game":_) -> True
-          _ -> False
+  where
+    isProtected req =
+      return $ case (requestMethod req, pathInfo req) of
+                -- Must be able to register without first being authenticated.
+                ("POST", "users":_) -> False
+                -- All other POSTs (i.e. writes) require authentication.
+                ("POST", _) -> True
+                -- Can't get user details without first being registered.
+                (_, "user":_) -> True
+                -- Everything else is publicly available.
+                _ -> False
 
 
 authUserDB :: UserDB -> CheckCreds
