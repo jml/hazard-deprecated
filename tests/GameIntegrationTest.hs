@@ -71,18 +71,7 @@ getValidPlays (RoundState players i dealtCard) =
       (PlayerState handCard _ _ _ _) = players !! i
       (Just hand) = handCard
       playerIds = [ pid | (PlayerState _ pid _ _ _) <- players ]
-      in getValidPlays' i (playerIds \\ [i]) hand dealt
-
-
--- XXX: Should be a public function in Haverer.
--- XXX: Should be generalized to MonadPlus
--- XXX: Find out if there's an implementation of MonadPlus where mplus is
--- random.
-getValidPlays' :: a -> [a] -> Card -> Card -> [(Card, Action.Play a)]
-getValidPlays' self others dealt hand = do
-  guard $ not $ Action.bustingHand dealt hand
-  [(dealt, play) | play <- Action.getValidPlays self others dealt] ++
-    [(hand, play) | play <- Action.getValidPlays self others hand]
+      in Action.getValidPlays i (playerIds \\ [i]) hand dealt
 
 
 choose :: [a] -> IO a
