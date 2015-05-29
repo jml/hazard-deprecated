@@ -308,7 +308,7 @@ spec = with hazardTestApp $ do
       unless ((f <$> decode body) == Just value)
         (liftIO $ expectationFailure $ textToString $ unlines [
             "Expected: " ++ show value,
-            "Actual: " ++ lazyToString body
+            "Actual: " ++ lazyToText body
             ])
       where body = simpleBody response
 
@@ -318,9 +318,8 @@ spec = with hazardTestApp $ do
       jsonResponseIs response' id x
 
 
--- XXX: Is there an easier way?
-lazyToString :: LByteString -> Text
-lazyToString = decodeUtf8 . L.toStrict
+lazyToText :: LByteString -> Text
+lazyToText = decodeUtf8 . L.toStrict
 
 
 suite :: IO TestTree
