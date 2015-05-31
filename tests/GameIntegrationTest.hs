@@ -23,11 +23,13 @@ import BasicPrelude
 import Data.Aeson hiding (json)
 import Data.Aeson.Types (parseMaybe)
 import Data.Foldable (for_)
+import qualified Data.HashMap.Lazy as HashMap
+import Data.Maybe (fromJust)
 import System.Random
-import qualified Data.ByteString.Lazy as L
 
-import Network.Wai.Test (SResponse(..))
+import Network.Wai.Test (SResponse(..), assertStatus, assertContentType)
 import Test.Hspec.Wai
+import Test.Hspec.Wai.Internal (WaiSession(WaiSession))
 import Test.Hspec.Wai.JSON
 import Test.Tasty
 import Test.Tasty.Hspec
@@ -81,6 +83,7 @@ choose xs = do
   return (xs !! (i - 1))
 
 
+playToJSON :: ToJSON a => Maybe (Card, Play a) -> Value
 playToJSON move =
   case move of
    Nothing -> object []
@@ -271,7 +274,7 @@ spec = with hazardTestApp $ do
               else liftIO $ Just <$> choose validPlays
       let message = playToJSON move
       response' <- postAs user roundUrl (encode message)
-      jsonResponseIs response' (isJust . (getKey "id" :: Value -> Maybe Int)) True
+      jsonResponseIs response' ((["id"] `isInfixOf`) . getKeys) True
 
   where
     makeGameAs :: Text -> Int -> WaiSession ByteString
@@ -297,29 +300,32 @@ spec = with hazardTestApp $ do
 
     getPlayer i v = getKey "players" v >>= \ps -> ps !! i
 
+
+    getKeys :: Value -> [Text]
+    getKeys = fromJust . parseMaybe (withObject "expected object" (return . HashMap.keys))
+
     getKey :: FromJSON a => Text -> Value -> Maybe a
     getKey key = parseMaybe (withObject "expected object" (.: key))
 
     getCard :: Text -> Value -> Maybe Card
     getCard = getKey
 
-    jsonResponseIs :: (FromJSON a, Eq b, Show b) => SResponse -> (a -> b) -> b -> WaiSession ()
-    jsonResponseIs response f value =
-      unless ((f <$> decode body) == Just value)
-        (liftIO $ expectationFailure $ textToString $ unlines [
-            "Expected: " ++ show value,
-            "Actual: " ++ lazyToText body
-            ])
-      where body = simpleBody response
+    getJsonResponse :: FromJSON a => SResponse -> WaiSession a
+    getJsonResponse response = do
+      WaiSession $ assertStatus 200 response
+      WaiSession $ assertContentType jsonContentType response
+      return . fromJust . decode . simpleBody $ response
+      where jsonContentType = "application/json; charset=utf-8"
+
+    jsonResponseIs :: (FromJSON a, Eq b, Show a, Show b) => SResponse -> (a -> b) -> b -> WaiSession ()
+    jsonResponseIs response f value = do
+      decoded <- getJsonResponse response
+      liftIO $ decoded `shouldSatisfy` ((==) value . f)
 
     hasJsonResponse :: (Eq a, Show a, FromJSON a, ToJSON a) => WaiSession SResponse -> a -> WaiSession ()
     hasJsonResponse response x = do
-      response' <- response
-      jsonResponseIs response' id x
-
-
-lazyToText :: LByteString -> Text
-lazyToText = decodeUtf8 . L.toStrict
+      response' <- getJsonResponse =<< response
+      liftIO $ response' `shouldBe` x
 
 
 suite :: IO TestTree

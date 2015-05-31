@@ -2,7 +2,7 @@
 , bytestring, containers, errors, haverer, hspec-wai
 , hspec-wai-json, http-types, lens, MonadRandom, mtl, random, Spock
 , stdenv, stm, tasty, tasty-hspec, tasty-quickcheck, text
-, transformers, wai, wai-extra
+, transformers, unordered-containers, wai, wai-extra
 }:
 mkDerivation {
   pname = "hazard";
@@ -18,7 +18,8 @@ mkDerivation {
   testDepends = [
     aeson base base64-bytestring basic-prelude bytestring errors
     haverer hspec-wai hspec-wai-json http-types MonadRandom random
-    Spock stm tasty tasty-hspec tasty-quickcheck text wai wai-extra
+    Spock stm tasty tasty-hspec tasty-quickcheck text
+    unordered-containers wai wai-extra
   ];
   description = "An HTTP API for playing Love Letter";
   license = stdenv.lib.licenses.asl20;

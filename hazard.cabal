@@ -90,5 +90,6 @@ test-suite test
                , random >= 1.1 && <1.2
                , basic-prelude >= 0.3.13 && < 0.5
                , errors >= 1.4.7 && < 1.5
+               , unordered-containers >= 0.2.5 && < 0.3
                , haverer
                , hazard
