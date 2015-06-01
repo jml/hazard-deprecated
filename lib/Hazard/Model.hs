@@ -82,12 +82,12 @@ getRound hazard i j =
   (fmap . (=<<)) (flip Games.getRound j . Games.gameState) (getGameSlot hazard i)
 
 
-addGame :: Hazard -> GameSlot Int -> STM ()
+addGame :: Hazard -> GameSlot Int -> STM Int
 addGame hazard game = do
   let allGames = games hazard
   games' <- readTVar allGames
   writeTVar allGames (V.snoc games' game)
-
+  return . length $ games'
 
 
 type SlotResult e a = Either (GameError e) (a, GameSlot Int)

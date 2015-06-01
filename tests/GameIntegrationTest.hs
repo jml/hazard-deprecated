@@ -108,6 +108,24 @@ spec = with hazardTestApp $ do
       postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
         [json|null|] {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
 
+    it "POST twice creates 2 game" $ do
+      post "/users" [json|{username: "foo"}|]
+      postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
+        [json|null|] {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
+      postAs "foo" "/games" [json|{numPlayers: 2, turnTimeout: 3600}|] `shouldRespondWith`
+        [json|null|] {matchStatus = 201, matchHeaders = ["Location" <:> "/game/1"] }
+
+    it "URLs from POSTs align properly" $ do
+      -- Post a 2 player game and 3 player game, and make sure that when we
+      -- GET the URLs that number of players is as we requested.
+      post "/users" [json|{username: "foo"}|]
+      postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|]
+      postAs "foo" "/games" [json|{numPlayers: 2, turnTimeout: 3600}|]
+      game0 <- get "/game/0"
+      jsonResponseIs game0 (getKey "numPlayers") (Just 3 :: Maybe Int)
+      game1 <- get "/game/1"
+      jsonResponseIs game1 (getKey "numPlayers") (Just 2 :: Maybe Int)
+
     it "unauthenticated POST fails" $
       post "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith` requiresAuth
 
