@@ -12,6 +12,9 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
+
 module Hazard.Model (
   Hazard
   , addGame
@@ -27,10 +30,11 @@ module Hazard.Model (
   , tryGetSlot
   ) where
 
+import BasicPrelude
+
 import Control.Concurrent.STM (STM, TVar, atomically, newTVar, modifyTVar, readTVar, writeTVar)
 import Control.Error
 import Control.Monad.Random
-import Control.Monad.State
 
 import Haverer.Round (Round)
 
