@@ -176,7 +176,7 @@ hazardWeb' hazard pwgen = do
     creator <- loggedInUser (users hazard)
     gameRequest <- expectJSON
     case validateCreationRequest gameRequest of
-     Left e -> terror $ show e  -- TODO: Return "bad request"
+     Left e -> badRequest (show e)
      Right r -> do
        let newGame = createGame creator r
        (gameId, game) <- liftIO $ atomically $ addGame hazard newGame
