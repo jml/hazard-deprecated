@@ -78,6 +78,9 @@ import Hazard.Users (
   )
 
 
+realm :: Text
+realm = "Hazard API"
+
 errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()
 errorMessage code message = do
   setStatus code
@@ -86,6 +89,12 @@ errorMessage code message = do
 
 badRequest :: (ToJSON a, MonadIO m) => a -> ActionT m ()
 badRequest = errorMessage badRequest400
+
+
+authenticationRequired :: MonadIO m => ActionT m ()
+authenticationRequired = do
+  setHeader "WWW-Authenticate" realm
+  errorMessage unauthorized401 ("Must log in" :: Text)
 
 
 expectJSON :: (MonadIO m, FromJSON a) => ActionT m a
@@ -101,7 +110,8 @@ expectJSON = do
 userWeb :: MonadIO m => UserDB -> IO ByteString -> SpockT m ()
 userWeb userDB pwgen = do
 
-  middleware $ basicAuth (authUserDB userDB) ("Hazard API" { authIsProtected = isProtected })
+  middleware $ basicAuth (authUserDB userDB) ("" { authRealm = encodeUtf8 realm,
+                                                   authIsProtected = isProtected })
 
   get "/users" $ do
     usernames' <- liftIO $ atomically $ usernames userDB
@@ -151,13 +161,8 @@ maybeLoggedInUser userDB = do
    Nothing -> return Nothing
 
 
-loggedInUser :: MonadIO m => UserDB -> ActionT m UserID
-loggedInUser userDB = do
-  maybeUser <- maybeLoggedInUser userDB
-  case maybeUser of
-   Just user -> return user
-   -- TODO: Raise "authentication required" error.
-   Nothing -> error "No user logged in"
+withAuth :: MonadIO m => UserDB -> (UserID -> ActionT m ()) -> ActionT m ()
+withAuth userDB action = maybeLoggedInUser userDB >>= maybe authenticationRequired action
 
 
 hazardWeb :: MonadIO m => Hazard -> SpockT m ()
@@ -172,8 +177,7 @@ hazardWeb' hazard pwgen = do
     games' <- liftIO $ atomically $ getGames hazard
     json ["/game/" ++ show i | i <- [0..length games' - 1]]
 
-  post "/games" $ do
-    creator <- loggedInUser (users hazard)
+  post "/games" $ withAuth (users hazard) $ \creator -> do
     gameRequest <- expectJSON
     case validateCreationRequest gameRequest of
      Left e -> badRequest (show e)
@@ -190,8 +194,7 @@ hazardWeb' hazard pwgen = do
      Just game' -> json game'
      Nothing -> errorMessage notFound404 ("no such game" :: Text)
 
-  post ("game" <//> var) $ \gameId -> do
-    joiner <- loggedInUser (users hazard)
+  post ("game" <//> var) $ \gameId -> withAuth (users hazard) $ \joiner -> do
     result <- liftIO $ performSlotAction hazard gameId (joinSlot joiner)
     case result of
      Left (GameNotFound _) -> errorMessage notFound404 ("no such game" :: Text)
@@ -206,8 +209,8 @@ hazardWeb' hazard pwgen = do
      Nothing -> errorMessage notFound404 ("no such round" :: Text)
      Just round' -> json (roundToJSON viewer round')
 
-  post ("game" <//> var <//> "round" <//> var) $ \gameId roundId -> do
-    poster <- loggedInUser (users hazard)
+  post ("game" <//> var <//> "round" <//> var) $ \gameId roundId ->
+    withAuth (users hazard) $ \poster -> do
     playRequest <- expectJSON
 
     result <- liftIO $ atomically $ runEitherT $ do
