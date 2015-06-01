@@ -35,9 +35,6 @@ import Network.Wai (requestMethod, pathInfo)
 import Network.Wai.Middleware.HttpAuth
 import Web.Spock.Safe
 
-
-import Haverer.Internal.Error
-
 import Hazard.HttpAuth (maybeLoggedIn)
 
 import Hazard.Model (
@@ -181,7 +178,7 @@ hazardWeb' hazard pwgen = do
     case result of
      Left (GameNotFound _) -> View.errorMessage notFound404 ("no such game" :: Text)
      Left (OtherError AlreadyStarted) -> View.badRequest ("Game already started" :: Text)
-     Left e -> terror $ show e
+     Left e -> View.internalError e
      Right (_, game) -> json game
 
   get ("game" <//> var <//> "round" <//> var) $ \gameId roundId -> do

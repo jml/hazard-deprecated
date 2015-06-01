@@ -25,11 +25,13 @@ module Hazard.Views (
   , authenticationRequired
   , badRequest
   , errorMessage
+  , internalError
   ) where
 
 import BasicPrelude
 
 import Data.Aeson (ToJSON, (.=), object)
+import qualified Data.Text as Text
 import Network.HTTP.Types.Status
 import qualified Text.Blaze.Html5 as H
 import Text.Blaze.Html.Renderer.Utf8 (renderHtml)
@@ -72,3 +74,10 @@ authenticationRequired :: MonadIO m => ActionT m ()
 authenticationRequired = do
   setHeader "WWW-Authenticate" realm
   errorMessage unauthorized401 ("Must log in" :: Text)
+
+
+-- | An internal error occurred.
+--
+-- This should be used sparingly. Internal errors ought not be possible.
+internalError :: Show a => a -> b
+internalError = error . Text.unpack . show
