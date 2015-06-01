@@ -106,14 +106,19 @@ spec = with hazardTestApp $ do
     it "POST creates game" $ do
       post "/users" [json|{username: "foo"}|]
       postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
-        [json|null|] {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
+        [json|{"creator": 0, "state": "pending", "players": [0], "turnTimeout": 3600,
+              "numPlayers": 3}|]
+        {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
 
     it "POST twice creates 2 game" $ do
       post "/users" [json|{username: "foo"}|]
       postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
-        [json|null|] {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
+        [json|{"creator": 0, "state": "pending", "players": [0], "turnTimeout": 3600,
+              "numPlayers": 3}|]
+        {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
       postAs "foo" "/games" [json|{numPlayers: 2, turnTimeout: 3600}|] `shouldRespondWith`
-        [json|null|] {matchStatus = 201, matchHeaders = ["Location" <:> "/game/1"] }
+        [json|{"creator": 0, "state": "pending", "players": [0], "turnTimeout": 3600,
+              "numPlayers": 2}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/game/1"] }
 
     it "URLs from POSTs align properly" $ do
       -- Post a 2 player game and 3 player game, and make sure that when we

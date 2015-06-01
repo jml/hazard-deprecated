@@ -179,11 +179,10 @@ hazardWeb' hazard pwgen = do
      Left e -> terror $ show e  -- TODO: Return "bad request"
      Right r -> do
        let newGame = createGame creator r
-       gameId <- liftIO $ atomically $ addGame hazard newGame
+       (gameId, game) <- liftIO $ atomically $ addGame hazard newGame
        setStatus created201
        setHeader "Location" ("/game/" ++ show gameId)
-       -- TODO: Return contents of new game
-       json (Nothing :: Maybe Int)
+       json game
 
   get ("game" <//> var) $ \gameId -> do
     game <- liftIO $ atomically $ getGameSlot hazard gameId
