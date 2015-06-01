@@ -18,28 +18,57 @@
 
 module Hazard.Views (
   dualResponse
+  , realm
+    -- | Pages
   , home
+    -- | Errors
+  , authenticationRequired
+  , badRequest
+  , errorMessage
   ) where
 
 import BasicPrelude
 
-import Data.Aeson (ToJSON)
-import Text.Blaze.Html5 as H
+import Data.Aeson (ToJSON, (.=), object)
+import Network.HTTP.Types.Status
+import qualified Text.Blaze.Html5 as H
 import Text.Blaze.Html.Renderer.Utf8 (renderHtml)
 import Web.Spock.Safe (
   ActionT,
   ClientPreferredFormat(..),
   lazyBytes,
   json,
-  preferredFormat)
+  preferredFormat,
+  setStatus,
+  setHeader
+  )
 
 
-dualResponse :: (ToJSON a, MonadIO m) => a -> Html -> ActionT m b
+dualResponse :: (ToJSON a, MonadIO m) => a -> H.Html -> ActionT m b
 dualResponse j h = do
   format <- preferredFormat
   case format of
    PrefJSON -> json j
    _ -> lazyBytes . renderHtml $ h
 
-home :: Html
+home :: H.Html
 home = "Hello World"
+
+realm :: Text
+realm = "Hazard API"
+
+
+errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()
+errorMessage code message = do
+  setStatus code
+  json (Data.Aeson.object ["message" .= message])
+
+
+badRequest :: (ToJSON a, MonadIO m) => a -> ActionT m ()
+badRequest = errorMessage badRequest400
+
+
+authenticationRequired :: MonadIO m => ActionT m ()
+authenticationRequired = do
+  setHeader "WWW-Authenticate" realm
+  errorMessage unauthorized401 ("Must log in" :: Text)
