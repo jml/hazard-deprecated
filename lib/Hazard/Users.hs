@@ -29,10 +29,11 @@ module Hazard.Users ( UserDB
 import BasicPrelude
 
 import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar)
-import Control.Error
 import Control.Monad.STM (STM)
 import Control.Monad.Random (Rand, uniform)
 import qualified Data.ByteString as B
+import Data.Vector ((!?))
+import qualified Data.Vector as V
 import System.Random (RandomGen)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
@@ -58,13 +59,13 @@ instance FromJSON UserCreationRequest where
   parseJSON _ = mzero
 
 
-newtype UserDB = UserDB { unUserDB :: TVar [User] }
+newtype UserDB = UserDB { unUserDB :: TVar (Vector User) }
 
 
 makeUserDB :: STM UserDB
-makeUserDB = UserDB <$> newTVar []
+makeUserDB = UserDB <$> newTVar empty
 
-usernames :: UserDB -> STM [ByteString]
+usernames :: UserDB -> STM (Vector ByteString)
 usernames = fmap (map username) . readTVar . unUserDB
             where username (User u _) = u
 
@@ -72,7 +73,7 @@ usernames = fmap (map username) . readTVar . unUserDB
 getUserByID :: UserDB -> UserID -> STM (Maybe User)
 getUserByID userDB i = do
   allUsers <- readTVar (unUserDB userDB)
-  return $ atMay allUsers i
+  return $ allUsers !? i
 
 
 getUserByName :: UserDB -> ByteString -> STM (Maybe User)
@@ -84,7 +85,7 @@ getUserByName userDB username = do
 getUserIDByName :: UserDB -> ByteString -> STM (Maybe UserID)
 getUserIDByName userDB username = do
   allUsers <- readTVar (unUserDB userDB)
-  return $ findIndex (\(User u _) -> u == username) allUsers
+  return $ V.findIndex (\(User u _) -> u == username) allUsers
 
 
 authenticate :: UserDB -> ByteString -> ByteString -> STM (Maybe User)
@@ -104,9 +105,9 @@ addUser userDB req password =
       users' = unUserDB userDB
   in do
      allUsers <- readTVar users'
-     case filter (\(User u _) -> u == username) allUsers of
-      [] -> do
-        writeTVar users' (allUsers ++ [newUser])
+     case V.find (\(User u _) -> u == username) allUsers of
+      Nothing  -> do
+        writeTVar users' (V.snoc allUsers newUser)
         return $ Just $ length allUsers
       _ -> return Nothing
 

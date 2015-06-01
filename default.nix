@@ -2,7 +2,7 @@
 , bytestring, containers, errors, haverer, hspec-wai
 , hspec-wai-json, http-types, lens, MonadRandom, mtl, random, Spock
 , stdenv, stm, tasty, tasty-hspec, tasty-quickcheck, text
-, transformers, unordered-containers, wai, wai-extra
+, transformers, unordered-containers, vector, wai, wai-extra
 }:
 mkDerivation {
   pname = "hazard";
@@ -13,7 +13,7 @@ mkDerivation {
   buildDepends = [
     aeson base basic-prelude bytestring containers errors haverer
     http-types lens MonadRandom mtl random Spock stm text transformers
-    wai wai-extra
+    vector wai wai-extra
   ];
   testDepends = [
     aeson base base64-bytestring basic-prelude bytestring errors
