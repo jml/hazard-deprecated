@@ -33,8 +33,10 @@ module Hazard.Model (
 import BasicPrelude
 
 import Control.Concurrent.STM (STM, TVar, atomically, newTVar, modifyTVar, readTVar, writeTVar)
-import Control.Error
+import Control.Error hiding ((!?))
 import Control.Monad.Random
+import Data.Vector ((!?), (//))
+import qualified Data.Vector as V
 
 import Haverer.Round (Round)
 
@@ -50,29 +52,29 @@ import Hazard.Games (
 import Hazard.Users (UserDB, makeUserDB)
 
 
-data Hazard = Hazard { games :: TVar [GameSlot Int]
+data Hazard = Hazard { games :: TVar (Vector (GameSlot Int))
                      , users :: UserDB
                      }
 
 
 makeHazard :: STM Hazard
-makeHazard = Hazard <$> newTVar [] <*> makeUserDB
+makeHazard = Hazard <$> newTVar empty <*> makeUserDB
 
 
-getGames :: Hazard -> STM [GameSlot Int]
+getGames :: Hazard -> STM (Vector (GameSlot Int))
 getGames = readTVar . games
 
 
 getGameSlot :: Hazard -> Int -> STM (Maybe (GameSlot Int))
 getGameSlot hazard i = do
   games' <- readTVar (games hazard)
-  return $ atMay games' i
+  return $ games' !? i
 
 
 tryGetSlot :: Hazard -> Int -> EitherT (GameError e) STM (GameSlot Int)
 tryGetSlot hazard i = do
   games' <- lift $ readTVar (games hazard)
-  tryAt (GameNotFound i) games' i
+  (games' !? i) ?? GameNotFound i
 
 
 getRound :: Hazard -> Int -> Int -> STM (Maybe (Round Int))
@@ -84,7 +86,7 @@ addGame :: Hazard -> GameSlot Int -> STM ()
 addGame hazard game = do
   let allGames = games hazard
   games' <- readTVar allGames
-  writeTVar allGames (games' ++ [game])
+  writeTVar allGames (V.snoc games' game)
 
 
 
@@ -101,7 +103,7 @@ modifySlot hazard i f = runEitherT $ do
     slotVar = games hazard
     setGame game =
       modifyTVar slotVar $
-      \games' -> take i games' ++ [game] ++ drop (i+1) games'
+      \games' -> games' // [(i, game)]
 
 
 applySlotAction :: RandomGen g => Hazard -> Int -> g -> SlotAction e g Int a -> STM (SlotResult e a)
