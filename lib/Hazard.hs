@@ -63,7 +63,13 @@ import Hazard.Games (
   validateCreationRequest,
   validatePlayRequest
   )
-
+import Hazard.Routes (
+  usersR,
+  userR,
+  gamesR,
+  gameR,
+  roundR
+  )
 import Hazard.Users (
   UserDB,
   UserID,
@@ -86,14 +92,6 @@ expectJSON = do
      setStatus badRequest400
      text "Expected JSON, but could not parse it: try removing whitespace?"
    Just contents -> return contents
-
-
-usersR :: Path '[]
-usersR = static "users"
-
-
-userR :: Path '[Int]
-userR = "user" <//> var
 
 
 userWeb :: MonadIO m => UserDB -> IO ByteString -> SpockT m ()
@@ -156,18 +154,6 @@ withAuth userDB action = maybeLoggedInUser userDB >>= maybe View.authenticationR
 
 hazardWeb :: MonadIO m => Hazard -> SpockT m ()
 hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword)
-
-
-gamesR :: Path '[]
-gamesR = static "games"
-
-
-gameR :: Path '[Int]
-gameR = "game" <//> var
-
-
-roundR :: Path '[Int, Int]
-roundR = gameR <//> "round" <//> var
 
 
 hazardWeb' :: MonadIO m => Hazard -> IO ByteString -> SpockT m ()
