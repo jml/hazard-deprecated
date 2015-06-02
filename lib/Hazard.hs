@@ -78,11 +78,13 @@ import Hazard.Users (
 
 expectJSON :: (MonadIO m, FromJSON a) => ActionT m a
 expectJSON = do
+  -- XXX: jsonBody appears to be using a parser that's really fussy about its
+  -- JSON: no whitespace, must quote object keys.
   body' <- jsonBody
   case body' of
    Nothing -> do
      setStatus badRequest400
-     text "Expected JSON, but could not parse it"
+     text "Expected JSON, but could not parse it: try removing whitespace?"
    Just contents -> return contents
 
 
