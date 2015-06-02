@@ -55,6 +55,7 @@ import BasicPrelude hiding (round)
 
 import Control.Error
 import Control.Monad.Except
+import Control.Monad.Identity
 import Control.Monad.Random
 import Control.Monad.State
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..))
@@ -319,32 +320,34 @@ getRound InProgress { rounds = rounds } i = atMay rounds i
 getRound _ _ = Nothing
 
 
-type SlotAction e g p a = StateT (GameSlot p) (RandT g (Either (GameError e))) a
+type SlotAction e g p a = StateT (GameSlot p) (EitherT (GameError e) (Rand g)) a
 
-type SlotAction' e p a = StateT (GameSlot p) (Either (GameError e)) a
+type SlotActionT e p m a = StateT (GameSlot p) (EitherT (GameError e) m) a
+
+type SlotAction' e p a = SlotActionT e p Identity a
+
+
+runSlotActionT :: SlotActionT e p m a -> GameSlot p -> m (Either (GameError e) (a, GameSlot p))
+runSlotActionT action slot = runEitherT (runStateT action slot)
 
 
 runSlotAction :: RandomGen g => SlotAction e g p a -> g -> GameSlot p -> Either (GameError e) (a, GameSlot p)
-runSlotAction action gen slot = evalRandT (runStateT action slot) gen
+runSlotAction action gen slot = evalRand (runSlotActionT action slot) gen
 
 
 runSlotAction' :: SlotAction' e p a -> GameSlot p -> Either (GameError e) (a, GameSlot p)
-runSlotAction' = runStateT
+runSlotAction' action slot = runIdentity $ runSlotActionT action slot
 
 
-liftEither :: MonadTrans t => Either e a -> t (Either (GameError e)) a
-liftEither = lift . fmapL OtherError
-
-
-liftMaybe :: MonadTrans t => e -> Maybe a -> t (Either (GameError e)) a
-liftMaybe e = liftEither . note e
+liftEither :: (Monad m, MonadTrans t) => EitherT e m a -> t (EitherT (GameError e) m) a
+liftEither = lift . fmapLT OtherError
 
 
 throwOtherError :: MonadError (GameError e) m => e -> m a
 throwOtherError = throwError . OtherError
 
 
-modifyGame :: (Game a -> RandT g (Either (GameError e)) (Game a)) -> SlotAction e g a ()
+modifyGame :: Monad m => (Game a -> EitherT (GameError e) m (Game a)) -> SlotActionT e a m ()
 modifyGame f = do
   slot <- get
   let game = gameState slot
@@ -355,7 +358,7 @@ modifyGame f = do
 joinSlot :: (RandomGen g, Ord p, Show p) => p -> SlotAction (JoinError p) g p ()
 joinSlot p = modifyGame $ \game ->
   do
-    game' <- (liftEither . joinGame p) game
+    game' <- (fmapLT OtherError . hoistEither . joinGame p) game
     case game' of
      Ready playerSet -> do
        deck <- newDeck
@@ -386,9 +389,9 @@ makeGame deck playerSet = do
 validatePlayRequest :: Eq a => a -> Int -> Maybe (PlayRequest a) -> SlotAction' (PlayError a) a (Maybe (PlayRequest a))
 validatePlayRequest player roundId request = do
   game <- gameState <$> get
-  round <- liftMaybe (RoundNotFound roundId) (getRound game roundId)
+  round <- liftEither $ getRound game roundId ?? RoundNotFound roundId
   unless (player `elem` getPlayers round) (throwOtherError (NotInGame player))
-  current <- liftMaybe RoundNotActive (currentPlayer round)
+  current <- liftEither $ currentPlayer round ?? RoundNotActive
   unless (player == current) (throwOtherError (NotYourTurn player current))
   return request
 
@@ -405,4 +408,4 @@ playSlot playRequest = do
      put (slot { gameState = InProgress { game = game, rounds = round':tail rounds } })
      return result
   where requestToPlay (PlayRequest card p) = (card, p)
-        playTurnOn round = liftEither . fmapL BadAction . Round.playTurn' round . fmap requestToPlay
+        playTurnOn round = liftEither . fmapLT BadAction . hoistEither . Round.playTurn' round . fmap requestToPlay
