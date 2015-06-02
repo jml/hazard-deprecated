@@ -14,3 +14,4 @@
     ssl_intermediates_path: /etc/ssl/certs/gandi-ca-bundle.pem
     ssl_root_certificate_path: /etc/ssl/certs/AddTrust_External_Root.pem
     ssl_trusted_certificate_path: /etc/ssl/certs/gandi-ca-bundle-full.pem
+    hazard_sha256sum: 8605415519d5dd2f02c9264184c36fcd39752cd4cf1cad1ae377e66c8a185f91

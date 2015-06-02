@@ -161,7 +161,7 @@
 - name: fetch hazard package
   get_url:
     url: http://hydra.mumak.net/job/loveletter/hazard/build/latest/nix/pkg/haskell-hazard-0.1.0.0-x86_64-linux.nixpkg
-    sha256sum: f86cd1185823cbdf353405339dd50e0e55ae747e3651f6c8aeddabff49f5bcee
+    sha256sum: "{{ hazard_sha256sum }}"
     dest: /tmp/haskell-hazard-0.1.0.0-x86_64-linux.nixpkg
 
 - name: install hazard
