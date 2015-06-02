@@ -17,8 +17,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Hazard.Views (
-  dualResponse
-  , realm
+  realm
     -- | Pages
   , home
     -- | Errors
@@ -53,11 +52,19 @@ dualResponse j h = do
    PrefJSON -> json j
    _ -> lazyBytes . renderHtml $ h
 
-home :: H.Html
-home = "Hello World"
-
 realm :: Text
 realm = "Hazard API"
+
+
+type View m = ActionT m ()
+
+
+home :: MonadIO m => View m
+home =
+  dualResponse jsonView htmlView
+  where
+    jsonView = object ["message" .= ("Hazard API" :: Text)]
+    htmlView = "Hello World"
 
 
 errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()

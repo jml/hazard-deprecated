@@ -150,7 +150,7 @@ hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword)
 
 hazardWeb' :: MonadIO m => Hazard -> IO ByteString -> SpockT m ()
 hazardWeb' hazard pwgen = do
-  get "/" $ View.dualResponse (object ["message" .= ("Hazard API" :: Text)]) View.home
+  get "/" View.home
 
   get "/games" $ do
     games' <- liftIO $ atomically $ getGames hazard
