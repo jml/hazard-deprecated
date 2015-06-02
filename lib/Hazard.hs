@@ -63,13 +63,7 @@ import Hazard.Games (
   validateCreationRequest,
   validatePlayRequest
   )
-import Hazard.Routes (
-  usersR,
-  userR,
-  gamesR,
-  gameR,
-  roundR
-  )
+import qualified Hazard.Routes as Route
 import Hazard.Users (
   UserDB,
   UserID,
@@ -100,22 +94,22 @@ userWeb userDB pwgen = do
   middleware $ basicAuth (authUserDB userDB) ("" { authRealm = encodeUtf8 View.realm,
                                                    authIsProtected = isProtected })
 
-  get usersR $ do
+  get Route.users $ do
     usernames' <- liftIO $ atomically $ usernames userDB
     View.users $ map decodeUtf8 usernames'
 
-  post usersR $ do
+  post Route.users $ do
     userRequest <- expectJSON
     password <- liftIO pwgen
     newID <- liftIO $ atomically $ addUser userDB userRequest password
     case newID of
      Just newID' -> do
        setStatus created201
-       setHeader "Location" (renderRoute userR newID')
+       setHeader "Location" (renderRoute Route.user newID')
        json (object ["password" .= decodeUtf8 password])
      Nothing -> View.badRequest ("username already exists" :: Text)
 
-  get userR $ \userID -> do
+  get Route.user $ \userID -> do
     user <- liftIO $ atomically $ getUserByID userDB userID
     case user of
      Just user' -> json user'
@@ -160,11 +154,11 @@ hazardWeb' :: MonadIO m => Hazard -> IO ByteString -> SpockT m ()
 hazardWeb' hazard pwgen = do
   get root View.home
 
-  get gamesR $ do
+  get Route.games $ do
     games' <- liftIO $ atomically $ getGames hazard
     View.games games'
 
-  post gamesR $ withAuth (users hazard) $ \creator -> do
+  post Route.games $ withAuth (users hazard) $ \creator -> do
     gameRequest <- expectJSON
     case validateCreationRequest gameRequest of
      Left e -> View.badRequest (show e)
@@ -172,16 +166,16 @@ hazardWeb' hazard pwgen = do
        let newGame = createGame creator r
        (gameId, game) <- liftIO $ atomically $ addGame hazard newGame
        setStatus created201
-       setHeader "Location" (renderRoute gameR gameId)
+       setHeader "Location" (renderRoute Route.game gameId)
        json game
 
-  get gameR $ \gameId -> do
+  get Route.game $ \gameId -> do
     game <- liftIO $ atomically $ getGameSlot hazard gameId
     case game of
      Just game' -> json game'
      Nothing -> View.errorMessage notFound404 ("no such game" :: Text)
 
-  post gameR $ \gameId -> withAuth (users hazard) $ \joiner -> do
+  post Route.game $ \gameId -> withAuth (users hazard) $ \joiner -> do
     result <- liftIO $ performSlotAction hazard gameId (joinSlot joiner)
     case result of
      Left (GameNotFound _) -> View.errorMessage notFound404 ("no such game" :: Text)
@@ -189,14 +183,14 @@ hazardWeb' hazard pwgen = do
      Left e -> View.internalError e
      Right (_, game) -> json game
 
-  get roundR $ \gameId roundId -> do
+  get Route.round $ \gameId roundId -> do
     viewer <- maybeLoggedInUser (users hazard)
     round <- liftIO $ atomically $ getRound hazard gameId roundId
     case round of
      Nothing -> View.errorMessage notFound404 ("no such round" :: Text)
      Just round' -> json (roundToJSON viewer round')
 
-  post roundR $ \gameId roundId ->
+  post Route.round $ \gameId roundId ->
     withAuth (users hazard) $ \poster -> do
     playRequest <- expectJSON
 

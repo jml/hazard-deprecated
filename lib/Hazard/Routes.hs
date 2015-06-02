@@ -16,41 +16,43 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | Routes for Hazard API.
+--
+-- This module is intended to be imported qualified.
+
 module Hazard.Routes (
-  usersR,
-  userR,
-  gamesR,
-  gameR,
-  roundR
+  users,
+  user,
+  games,
+  game,
+  round
   ) where
 
 
-import BasicPrelude
+import BasicPrelude hiding (round)
 import Web.Spock.Safe
 
 
 -- | Endpoint for managing users.
-usersR :: Path '[]
-usersR = static "users"
+users :: Path '[]
+users = static "users"
 
 
 -- | Page for a single user.
-userR :: Path '[Int]
-userR = "user" <//> var
+user :: Path '[Int]
+user = "user" <//> var
 
 
 -- | Endpoint for creating and managing games.
-gamesR :: Path '[]
-gamesR = static "games"
+games :: Path '[]
+games = static "games"
 
 
 -- | Page for a single game.
-gameR :: Path '[Int]
-gameR = "game" <//> var
+game :: Path '[Int]
+game = "game" <//> var
 
 
 -- | Page for a round in a game.
-roundR :: Path '[Int, Int]
-roundR = gameR <//> "round" <//> var
-
-
+round :: Path '[Int, Int]
+round = game <//> "round" <//> var
