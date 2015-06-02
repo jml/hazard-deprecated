@@ -29,14 +29,11 @@ import Control.Error
 import Control.Monad.Random (evalRandIO)
 import Control.Monad.STM (atomically)
 
-import Data.Aeson (FromJSON(..), ToJSON(..), (.=), object)
+import Data.Aeson (FromJSON(..), (.=), object)
 import Network.HTTP.Types.Status
 import Network.Wai (requestMethod, pathInfo)
 import Network.Wai.Middleware.HttpAuth
 import Web.Spock.Safe
-
-
-import Haverer.Internal.Error
 
 import Hazard.HttpAuth (maybeLoggedIn)
 
@@ -53,6 +50,7 @@ import Hazard.Model (
   tryGetSlot,
   users
   )
+import qualified Hazard.Views as View
 
 import Hazard.Games (
   createGame,
@@ -78,44 +76,27 @@ import Hazard.Users (
   )
 
 
-realm :: Text
-realm = "Hazard API"
-
-errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()
-errorMessage code message = do
-  setStatus code
-  json (object ["message" .= message])
-
-
-badRequest :: (ToJSON a, MonadIO m) => a -> ActionT m ()
-badRequest = errorMessage badRequest400
-
-
-authenticationRequired :: MonadIO m => ActionT m ()
-authenticationRequired = do
-  setHeader "WWW-Authenticate" realm
-  errorMessage unauthorized401 ("Must log in" :: Text)
-
-
 expectJSON :: (MonadIO m, FromJSON a) => ActionT m a
 expectJSON = do
+  -- XXX: jsonBody appears to be using a parser that's really fussy about its
+  -- JSON: no whitespace, must quote object keys.
   body' <- jsonBody
   case body' of
    Nothing -> do
      setStatus badRequest400
-     text "Expected JSON, but could not parse it"
+     text "Expected JSON, but could not parse it: try removing whitespace?"
    Just contents -> return contents
 
 
 userWeb :: MonadIO m => UserDB -> IO ByteString -> SpockT m ()
 userWeb userDB pwgen = do
 
-  middleware $ basicAuth (authUserDB userDB) ("" { authRealm = encodeUtf8 realm,
+  middleware $ basicAuth (authUserDB userDB) ("" { authRealm = encodeUtf8 View.realm,
                                                    authIsProtected = isProtected })
 
   get "/users" $ do
     usernames' <- liftIO $ atomically $ usernames userDB
-    json $ map decodeUtf8 usernames'
+    View.users $ map decodeUtf8 usernames'
 
   post "/users" $ do
     userRequest <- expectJSON
@@ -126,13 +107,13 @@ userWeb userDB pwgen = do
        setStatus created201
        setHeader "Location" ("/user/" ++ show newID')
        json (object ["password" .= decodeUtf8 password])
-     Nothing -> badRequest ("username already exists" :: Text)
+     Nothing -> View.badRequest ("username already exists" :: Text)
 
   get ("user" <//> var) $ \userID -> do
     user <- liftIO $ atomically $ getUserByID userDB userID
     case user of
      Just user' -> json user'
-     Nothing -> errorMessage notFound404 ("no such user" :: Text)
+     Nothing -> View.errorMessage notFound404 ("no such user" :: Text)
 
   where
     isProtected req =
@@ -162,7 +143,7 @@ maybeLoggedInUser userDB = do
 
 
 withAuth :: MonadIO m => UserDB -> (UserID -> ActionT m ()) -> ActionT m ()
-withAuth userDB action = maybeLoggedInUser userDB >>= maybe authenticationRequired action
+withAuth userDB action = maybeLoggedInUser userDB >>= maybe View.authenticationRequired action
 
 
 hazardWeb :: MonadIO m => Hazard -> SpockT m ()
@@ -171,16 +152,16 @@ hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword)
 
 hazardWeb' :: MonadIO m => Hazard -> IO ByteString -> SpockT m ()
 hazardWeb' hazard pwgen = do
-  get "/" $ html "Hello World!"
+  get "/" View.home
 
   get "/games" $ do
     games' <- liftIO $ atomically $ getGames hazard
-    json ["/game/" ++ show i | i <- [0..length games' - 1]]
+    View.games games'
 
   post "/games" $ withAuth (users hazard) $ \creator -> do
     gameRequest <- expectJSON
     case validateCreationRequest gameRequest of
-     Left e -> badRequest (show e)
+     Left e -> View.badRequest (show e)
      Right r -> do
        let newGame = createGame creator r
        (gameId, game) <- liftIO $ atomically $ addGame hazard newGame
@@ -192,21 +173,21 @@ hazardWeb' hazard pwgen = do
     game <- liftIO $ atomically $ getGameSlot hazard gameId
     case game of
      Just game' -> json game'
-     Nothing -> errorMessage notFound404 ("no such game" :: Text)
+     Nothing -> View.errorMessage notFound404 ("no such game" :: Text)
 
   post ("game" <//> var) $ \gameId -> withAuth (users hazard) $ \joiner -> do
     result <- liftIO $ performSlotAction hazard gameId (joinSlot joiner)
     case result of
-     Left (GameNotFound _) -> errorMessage notFound404 ("no such game" :: Text)
-     Left (OtherError AlreadyStarted) -> badRequest ("Game already started" :: Text)
-     Left e -> terror $ show e
+     Left (GameNotFound _) -> View.errorMessage notFound404 ("no such game" :: Text)
+     Left (OtherError AlreadyStarted) -> View.badRequest ("Game already started" :: Text)
+     Left e -> View.internalError e
      Right (_, game) -> json game
 
   get ("game" <//> var <//> "round" <//> var) $ \gameId roundId -> do
     viewer <- maybeLoggedInUser (users hazard)
     round <- liftIO $ atomically $ getRound hazard gameId roundId
     case round of
-     Nothing -> errorMessage notFound404 ("no such round" :: Text)
+     Nothing -> View.errorMessage notFound404 ("no such round" :: Text)
      Just round' -> json (roundToJSON viewer round')
 
   post ("game" <//> var <//> "round" <//> var) $ \gameId roundId ->
@@ -223,9 +204,9 @@ hazardWeb' hazard pwgen = do
 
     case result of
      Left (GameNotFound {}) ->
-       errorMessage notFound404 ("no such game" :: Text)
+       View.errorMessage notFound404 ("no such game" :: Text)
      Left (OtherError (RoundNotFound {})) ->
-       errorMessage notFound404 ("no such round" :: Text)
+       View.errorMessage notFound404 ("no such round" :: Text)
      Left (OtherError (NotYourTurn _ current)) -> do
        setStatus badRequest400
        json (object ["message" .= ("Not your turn" :: Text),

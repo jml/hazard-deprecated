@@ -1,5 +1,5 @@
 { mkDerivation, aeson, base, base64-bytestring, basic-prelude
-, bytestring, containers, errors, haverer, hspec-wai
+, blaze-html, bytestring, containers, errors, haverer, hspec-wai
 , hspec-wai-json, http-types, lens, MonadRandom, mtl, random, Spock
 , stdenv, stm, tasty, tasty-hspec, tasty-quickcheck, text
 , transformers, unordered-containers, vector, wai, wai-extra
@@ -11,9 +11,9 @@ mkDerivation {
   isLibrary = true;
   isExecutable = true;
   buildDepends = [
-    aeson base basic-prelude bytestring containers errors haverer
-    http-types lens MonadRandom mtl random Spock stm text transformers
-    vector wai wai-extra
+    aeson base basic-prelude blaze-html bytestring containers errors
+    haverer http-types lens MonadRandom mtl random Spock stm text
+    transformers vector wai wai-extra
   ];
   testDepends = [
     aeson base base64-bytestring basic-prelude bytestring errors
