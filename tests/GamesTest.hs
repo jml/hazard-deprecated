@@ -23,13 +23,13 @@ import BasicPrelude
 
 import Data.Aeson
 import Data.Aeson.Types (parseEither)
-import System.Random (mkStdGen)
 
 import Test.Tasty
 import Test.Tasty.QuickCheck
 
 import Haverer.Internal.Error
 import Haverer.Deck (Card(..))
+import Haverer.Testing ()
 
 import Hazard.Games (GameCreationRequest(..),
                      GameSlot,
@@ -90,7 +90,8 @@ addPlayers n g =
   where
     addPlayer g' = do
       p <- arbitrary `suchThat` (`notElem` players g')
-      return $ snd $ assertRight' (runSlotAction (joinSlot p) (mkStdGen 42) g')
+      deck <- arbitrary
+      return $ snd $ assertRight' (runSlotAction (joinSlot deck p) g')
 
 
 prop_creatorInPlayers :: Eq a => GameSlot a -> Bool

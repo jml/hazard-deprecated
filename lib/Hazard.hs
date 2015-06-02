@@ -33,8 +33,10 @@ import Data.Aeson (FromJSON(..), (.=), object)
 import Network.HTTP.Types.Status
 import Network.Wai (requestMethod, pathInfo)
 import Network.Wai.Middleware.HttpAuth
+
 import Web.Spock.Safe
 
+import Haverer (Complete, Deck, newDeck)
 import Hazard.HttpAuth (maybeLoggedIn)
 
 import Hazard.Model (
@@ -44,9 +46,8 @@ import Hazard.Model (
   getGames,
   getRound,
   makeHazard,
-  applySlotAction',
-  performSlotAction,
-  runSlotAction',
+  applySlotAction,
+  runSlotAction,
   tryGetSlot,
   users
   )
@@ -147,11 +148,11 @@ withAuth userDB action = maybeLoggedInUser userDB >>= maybe View.authenticationR
 
 
 hazardWeb :: MonadIO m => Hazard -> SpockT m ()
-hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword)
+hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword) (evalRandIO newDeck)
 
 
-hazardWeb' :: MonadIO m => Hazard -> IO ByteString -> SpockT m ()
-hazardWeb' hazard pwgen = do
+hazardWeb' :: MonadIO m => Hazard -> IO ByteString -> IO (Deck Complete) -> SpockT m ()
+hazardWeb' hazard pwgen deckGen = do
   get root View.home
 
   get Route.games $ do
@@ -176,7 +177,8 @@ hazardWeb' hazard pwgen = do
      Nothing -> View.errorMessage notFound404 ("no such game" :: Text)
 
   post Route.game $ \gameId -> withAuth (users hazard) $ \joiner -> do
-    result <- liftIO $ performSlotAction hazard gameId (joinSlot joiner)
+    deck <- liftIO deckGen
+    result <- liftIO $ atomically $ applySlotAction hazard gameId (joinSlot deck joiner)
     case result of
      Left (GameNotFound _) -> View.errorMessage notFound404 ("no such game" :: Text)
      Left (OtherError AlreadyStarted) -> View.badRequest ("Game already started" :: Text)
@@ -198,8 +200,8 @@ hazardWeb' hazard pwgen = do
       slot <- tryGetSlot hazard gameId
       -- TODO: Use types to enforce validated play requests
       let validation = validatePlayRequest poster roundId playRequest
-      playRequest' <- hoistEither $ fst <$> runSlotAction' validation slot
-      result <- lift $ applySlotAction' hazard gameId (playSlot playRequest')
+      playRequest' <- hoistEither $ fst <$> runSlotAction validation slot
+      result <- lift $ applySlotAction hazard gameId (playSlot playRequest')
       hoistEither $ fst <$> result
 
     case result of
