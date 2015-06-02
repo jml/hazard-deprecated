@@ -154,7 +154,7 @@ hazardWeb' hazard pwgen = do
 
   get "/games" $ do
     games' <- liftIO $ atomically $ getGames hazard
-    json ["/game/" ++ show i | i <- [0..length games' - 1]]
+    View.games games'
 
   post "/games" $ withAuth (users hazard) $ \creator -> do
     gameRequest <- expectJSON

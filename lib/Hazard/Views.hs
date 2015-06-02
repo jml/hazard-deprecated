@@ -12,7 +12,7 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-
+{-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -20,6 +20,7 @@ module Hazard.Views (
   realm
     -- | Pages
   , home
+  , games
     -- | Errors
   , authenticationRequired
   , badRequest
@@ -30,6 +31,7 @@ module Hazard.Views (
 import BasicPrelude
 
 import Data.Aeson (ToJSON, (.=), object)
+import Data.Foldable (Foldable)
 import qualified Data.Text as Text
 import Network.HTTP.Types.Status
 import Text.Blaze.Html5 ((!))
@@ -52,7 +54,9 @@ dualResponse j h = do
   format <- preferredFormat
   case format of
    PrefJSON -> json j
-   _ -> lazyBytes . renderHtml $ h
+   _ -> do
+     setHeader "Content-Type" "text/html; charset=utf-8"
+     lazyBytes . renderHtml $ h
 
 realm :: Text
 realm = "Hazard API"
@@ -71,8 +75,14 @@ home =
       H.body $ do
         H.h1 "Hazard"
         H.p "An implementation of a card game you know and love."
-        H.p "This is currently intended as an API server, rather than an \
-            \ interactive user interface."
+        H.p $ do
+          "This is currently intended as an API server, rather than an "
+          "interactive user interface."
+        H.h2 "Endpoints"
+        H.ul $
+          H.li $ do
+            H.a ! href "/games" $ "/games"
+            H.text " – browse and create Hazard games"
         H.p "The API will change."
         H.h2 "Source code"
         H.ul $ do
@@ -83,6 +93,42 @@ home =
                 H.a ! href "https://github.com/jml/haverer" $ "haverer"
                 " (underlying library)"
 
+
+games :: (Foldable f, MonadIO m) => f a -> View m
+games games' =
+  dualResponse j h
+  where
+    j = gamesLinks
+    h = H.docTypeHtml $ do
+      H.head $ H.title "Hazard :: Games"
+      H.body $ do
+        H.h1 "/games"
+        H.p "Endpoint for registering and creating games."
+        H.h2 "GET"
+        H.p "Returns a list of games."
+        H.h2 "POST"
+        H.p "Will create a game, and return a link to it."
+        H.p "e.g."
+        H.pre $ H.text $ unlines [
+          "POST /games",
+          "",
+          "{ numPlayers = 3, ",
+          "  turnTimeout = 3600 }"
+          ]
+        H.p $ do
+          "will register a game for three players with a turn timeout "
+          "of one hour, and return a "
+          H.code "201 Created"
+          " response with a "
+          H.code "Location"
+          " header pointing at the newly created game."
+        H.p $ do
+          "The creator of the game is the logged-in user, who is also "
+          "automatically added to the game."
+        H.h2 "All games, past and present"
+        H.ul $ forM_ gamesLinks selfLink
+    gamesLinks = ["/game/" ++ show i | i <- [0..length games' - 1]]
+    selfLink url = H.a ! href (H.textValue url) $ H.text url
 
 errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()
 errorMessage code message = do
