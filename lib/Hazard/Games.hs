@@ -55,7 +55,6 @@ import BasicPrelude hiding (round)
 import Control.Error
 import Control.Monad.Except
 import Control.Monad.Identity
-import Control.Monad.Random
 import Control.Monad.State
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..))
 import qualified Data.Map as Map
@@ -77,7 +76,6 @@ import Haverer (
   getPlayerMap,
   getHand,
   isProtected,
-  newDeck,
   toPlayers,
   toPlayerSet,
   viewAction
@@ -348,14 +346,12 @@ modifyGame f = do
   put (slot { gameState = game'' })
 
 
-joinSlot :: (MonadRandom m, Ord p, Show p) => p -> SlotActionT (JoinError p) p m ()
-joinSlot p = modifyGame $ \game ->
+joinSlot :: (Ord p, Show p) => Deck Complete -> p -> SlotAction (JoinError p) p ()
+joinSlot deck p = modifyGame $ \game ->
   do
     game' <- (fmapLT OtherError . hoistEither . joinGame p) game
     case game' of
-     Ready playerSet -> do
-       deck <- newDeck
-       return $ makeGame deck playerSet
+     Ready playerSet -> return $ makeGame deck playerSet
      _ -> return game'
 
 

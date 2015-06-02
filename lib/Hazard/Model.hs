@@ -21,11 +21,8 @@ module Hazard.Model (
   , getGameSlot
   , getGames
   , makeHazard
-  , modifySlot
   , applySlotAction
-  , performSlotAction
   , runSlotAction
-  , runSlotActionT
   , users
   , getRound
   , tryGetSlot
@@ -33,7 +30,7 @@ module Hazard.Model (
 
 import BasicPrelude
 
-import Control.Concurrent.STM (STM, TVar, atomically, newTVar, modifyTVar, readTVar, writeTVar)
+import Control.Concurrent.STM (STM, TVar, newTVar, modifyTVar, readTVar, writeTVar)
 import Control.Error hiding ((!?))
 import Data.Vector ((!?), (//))
 import qualified Data.Vector as V
@@ -45,8 +42,7 @@ import Hazard.Games (
   GameSlot,
   GameError(..),
   SlotAction,
-  runSlotAction,
-  runSlotActionT
+  runSlotAction
   )
 import Hazard.Users (UserDB, makeUserDB)
 
@@ -107,6 +103,3 @@ modifySlot hazard i f = runEitherT $ do
 
 applySlotAction :: Hazard -> Int -> SlotAction e Int a -> STM (SlotResult e a)
 applySlotAction hazard i action = modifySlot hazard i (runSlotAction action)
-
-performSlotAction :: Hazard -> Int -> SlotAction e Int a -> IO (SlotResult e a)
-performSlotAction hazard i = atomically . applySlotAction hazard i
