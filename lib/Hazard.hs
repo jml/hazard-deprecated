@@ -46,9 +46,9 @@ import Hazard.Model (
   getGames,
   getRound,
   makeHazard,
-  applySlotAction',
+  applySlotAction,
   modifySlot,
-  runSlotAction',
+  runSlotAction,
   runSlotActionT,
   tryGetSlot,
   users
@@ -202,8 +202,8 @@ hazardWeb' hazard pwgen = do
       slot <- tryGetSlot hazard gameId
       -- TODO: Use types to enforce validated play requests
       let validation = validatePlayRequest poster roundId playRequest
-      playRequest' <- hoistEither $ fst <$> runSlotAction' validation slot
-      result <- lift $ applySlotAction' hazard gameId (playSlot playRequest')
+      playRequest' <- hoistEither $ fst <$> runSlotAction validation slot
+      result <- lift $ applySlotAction hazard gameId (playSlot playRequest')
       hoistEither $ fst <$> result
 
     case result of

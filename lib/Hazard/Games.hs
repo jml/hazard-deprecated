@@ -30,8 +30,8 @@ module Hazard.Games ( GameCreationError(..)
                     , JoinError(..)
                     , PlayError(..)
                     , Seconds
-                    , SlotAction'
-                    , runSlotAction'
+                    , SlotAction
+                    , runSlotAction
                     , runSlotActionT
                     , creator
                     , createGame
@@ -321,15 +321,15 @@ getRound _ _ = Nothing
 
 type SlotActionT e p m a = StateT (GameSlot p) (EitherT (GameError e) m) a
 
-type SlotAction' e p a = SlotActionT e p Identity a
+type SlotAction e p a = SlotActionT e p Identity a
 
 
 runSlotActionT :: SlotActionT e p m a -> GameSlot p -> m (Either (GameError e) (a, GameSlot p))
 runSlotActionT action slot = runEitherT (runStateT action slot)
 
 
-runSlotAction' :: SlotAction' e p a -> GameSlot p -> Either (GameError e) (a, GameSlot p)
-runSlotAction' action slot = runIdentity $ runSlotActionT action slot
+runSlotAction :: SlotAction e p a -> GameSlot p -> Either (GameError e) (a, GameSlot p)
+runSlotAction action slot = runIdentity $ runSlotActionT action slot
 
 
 liftEither :: (Monad m, MonadTrans t) => EitherT e m a -> t (EitherT (GameError e) m) a
@@ -379,7 +379,7 @@ makeGame deck playerSet = do
   InProgress { game = game, rounds = pure round }
 
 
-validatePlayRequest :: Eq a => a -> Int -> Maybe (PlayRequest a) -> SlotAction' (PlayError a) a (Maybe (PlayRequest a))
+validatePlayRequest :: Eq a => a -> Int -> Maybe (PlayRequest a) -> SlotAction (PlayError a) a (Maybe (PlayRequest a))
 validatePlayRequest player roundId request = do
   game <- gameState <$> get
   round <- liftEither $ getRound game roundId ?? RoundNotFound roundId
@@ -389,7 +389,7 @@ validatePlayRequest player roundId request = do
   return request
 
 
-playSlot :: (Ord a, Show a) => Maybe (PlayRequest a) -> SlotAction' (PlayError a) a (Result a)
+playSlot :: (Ord a, Show a) => Maybe (PlayRequest a) -> SlotAction (PlayError a) a (Result a)
 playSlot playRequest = do
   slot <- get
   case gameState slot of

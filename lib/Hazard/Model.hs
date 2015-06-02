@@ -22,9 +22,9 @@ module Hazard.Model (
   , getGames
   , makeHazard
   , modifySlot
-  , applySlotAction'
-  , performSlotAction'
-  , runSlotAction'
+  , applySlotAction
+  , performSlotAction
+  , runSlotAction
   , runSlotActionT
   , users
   , getRound
@@ -44,8 +44,8 @@ import qualified Hazard.Games as Games
 import Hazard.Games (
   GameSlot,
   GameError(..),
-  SlotAction',
-  runSlotAction',
+  SlotAction,
+  runSlotAction,
   runSlotActionT
   )
 import Hazard.Users (UserDB, makeUserDB)
@@ -105,8 +105,8 @@ modifySlot hazard i f = runEitherT $ do
       \games' -> games' // [(i, game)]
 
 
-applySlotAction' :: Hazard -> Int -> SlotAction' e Int a -> STM (SlotResult e a)
-applySlotAction' hazard i action = modifySlot hazard i (runSlotAction' action)
+applySlotAction :: Hazard -> Int -> SlotAction e Int a -> STM (SlotResult e a)
+applySlotAction hazard i action = modifySlot hazard i (runSlotAction action)
 
-performSlotAction' :: Hazard -> Int -> SlotAction' e Int a -> IO (SlotResult e a)
-performSlotAction' hazard i = atomically . applySlotAction' hazard i
+performSlotAction :: Hazard -> Int -> SlotAction e Int a -> IO (SlotResult e a)
+performSlotAction hazard i = atomically . applySlotAction hazard i
