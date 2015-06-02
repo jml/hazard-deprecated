@@ -23,9 +23,8 @@ import BasicPrelude
 import Data.Aeson hiding (json)
 import Data.Aeson.Types (parseMaybe)
 import Data.Foldable (for_)
-import qualified Data.HashMap.Lazy as HashMap
+import Data.IORef
 import Data.Maybe (fromJust)
-import System.Random
 
 import Network.Wai.Test (SResponse(..), assertStatus, assertContentType)
 import Test.Hspec.Wai hiding (get, post)
@@ -34,67 +33,18 @@ import Test.Hspec.Wai.JSON
 import Test.Tasty
 import Test.Tasty.Hspec
 
-import Haverer.Action (Play(..))
-import qualified Haverer.Action as Action
-import Haverer.Deck (Card)
+import Haverer.Deck (Card(..), Complete, Deck, makeDeck)
 
-import Utils (get, getAs, hazardTestApp, post, postAs, requiresAuth)
+import Utils (get, getAs, hazardTestApp', post, postAs, requiresAuth, makeTestDeck)
 
 
--- XXX: All of this guff is so we can actually post a valid move once we've
--- received a response. An alternative would be to pre-program the server to
--- give predictable responses: i.e. rather than shuffling the deck, allow us
--- to specify the order of cards.
-
-data PlayerState = PlayerState (Maybe Card) Int Bool Bool [Card] deriving (Eq, Show)
-
-instance FromJSON PlayerState where
-
-  parseJSON (Object v) = PlayerState <$> v .:? "hand"
-                                     <*> v .: "id"
-                                     <*> v .: "active"
-                                     <*> v .: "protected"
-                                     <*> v .: "discards"
-  parseJSON _ = mzero
+testDeck :: Deck Complete
+testDeck = makeTestDeck "sscmwwskkpcsgspx"
 
 
-data RoundState = RoundState [PlayerState] Int (Maybe Card) deriving (Eq, Show)
 
-instance FromJSON RoundState where
-
-  parseJSON (Object v) = RoundState <$> v .: "players"
-                                    <*> v .: "currentPlayer"
-                                    <*> v .:? "dealtCard"
-
-
-getValidPlays :: RoundState -> [(Card, Action.Play Int)]
-getValidPlays (RoundState players i dealtCard) =
-  let (Just dealt) = dealtCard
-      (PlayerState handCard _ _ _ _) = players !! i
-      (Just hand) = handCard
-      playerIds = [ pid | (PlayerState _ pid _ _ _) <- players ]
-      in Action.getValidPlays i (playerIds \\ [i]) hand dealt
-
-
-choose :: [a] -> IO a
-choose xs = do
-  let n = length xs
-  i <- getStdRandom (randomR (1, n))
-  return (xs !! (i - 1))
-
-
-playToJSON :: ToJSON a => Maybe (Card, Play a) -> Value
-playToJSON move =
-  case move of
-   Nothing -> object []
-   Just (card, NoEffect) -> object ["card" .= card]
-   Just (card, Attack target) -> object ["card" .= card, "target" .= target]
-   Just (card, Guess target guess) -> object ["card" .= card, "target" .= target,
-                                              "guess" .= guess]
-
-
-spec :: Spec
-spec = with hazardTestApp $ do
+spec :: IORef (Deck Complete) -> Spec
+spec deckVar = with (hazardTestApp' deckVar) $ do
   describe "GET /" $
     it "responds with 200" $
       get "/" `shouldRespondWith` 200
@@ -215,7 +165,8 @@ spec = with hazardTestApp $ do
       -- integer player IDs, and never the user names. I don't know whether
       -- that's a good thing or a bad thing, so I'm going to leave it as
       -- integers until we start implementing actual clients.
-      (game, [foo, bar, baz]) <- makeStartedGame 3
+      let deck = fromJust $ makeDeck [Soldier,Soldier,Clown,Minister,Wizard,Wizard,Soldier,Knight,Knight,Priestess,Clown,Soldier,General,Soldier,Priestess,Prince]
+      (game, [foo, bar, baz]) <- makeStartedGame' 3 deck
       get (game ++ "/round/0") `hasJsonResponse`
         object [
           "players" .= [
@@ -281,23 +232,15 @@ spec = with hazardTestApp $ do
         `shouldRespondWith` [json|{message: "You are not playing"}|] { matchStatus = 400 }
 
     it "POST does *something*" $ do
-      (game, [_, _, baz]) <- makeStartedGame 3
-      -- XXX: Since we don't know the cards, we don't know how to generate a
-      -- valid play. We could maybe try (using Haverer.Testing and the data
-      -- from GET), or we could somehow prefab the cards.
+      let deck = makeTestDeck "sscmwwskkpcsgspx"
+      (game, [_, _, baz]) <- makeStartedGame' 3 deck
+      -- Hands are Soldier, Clown, Minister. Player is dealt Wizard.
 
-      -- XXX: Since we don't know the layout of the cards, we don't know what
-      -- the response to the turn is going to be. I guess we should just
-      -- assert that it's going to have certain keys.
+      -- Play Wizard on self.
       let roundUrl = game ++ "/round/0"
           user = encodeUtf8 baz
-      (Just response) <- decode <$> simpleBody <$> getAs user roundUrl
-      let validPlays = getValidPlays response
-      move <- if null validPlays then return Nothing
-              else liftIO $ Just <$> choose validPlays
-      let message = playToJSON move
-      response' <- postAs user roundUrl (encode message)
-      jsonResponseIs response' ((["id"] `isInfixOf`) . getKeys) True
+      postAs user roundUrl [json|{card: "wizard", target: 2}|]
+        `shouldRespondWith` [json|{id: 2, result: "forced-discard", card: "Wizard", target: 2}|]
 
   where
     makeGameAs :: Text -> Int -> WaiSession ByteString
@@ -310,12 +253,17 @@ spec = with hazardTestApp $ do
        Just path -> return path
        Nothing -> error "Did not create game: could not find return header"
 
+
     makeStartedGame :: Int -> WaiSession (ByteString, [Text])
-    makeStartedGame n =
+    makeStartedGame n = makeStartedGame' n testDeck
+
+    makeStartedGame' :: Int -> Deck Complete -> WaiSession (ByteString, [Text])
+    makeStartedGame' n deck =
       let userPool = ["foo", "bar", "baz", "qux"]
           users = take n userPool
           creator:others = users
       in do
+        liftIO $ writeIORef deckVar deck
         game <- makeGameAs creator n
         for_ others (\u -> do post "/users" (encode $ object ["username" .= u])
                               postAs (encodeUtf8 u) game [json|null|] `shouldRespondWith` 200)
@@ -323,9 +271,6 @@ spec = with hazardTestApp $ do
 
     getPlayer i v = getKey "players" v >>= \ps -> ps !! i
 
-
-    getKeys :: Value -> [Text]
-    getKeys = fromJust . parseMaybe (withObject "expected object" (return . HashMap.keys))
 
     getKey :: FromJSON a => Text -> Value -> Maybe a
     getKey key = parseMaybe (withObject "expected object" (.: key))
@@ -352,4 +297,6 @@ spec = with hazardTestApp $ do
 
 
 suite :: IO TestTree
-suite = testSpec "Game API" spec
+suite = do
+  deckVar <- newIORef testDeck
+  testSpec "Game API" (spec deckVar)

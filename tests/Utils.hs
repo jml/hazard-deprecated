@@ -12,20 +12,27 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Utils ( hazardTestApp
+             , hazardTestApp'
              , Utils.get
              , getAs
              , Utils.post
              , postAs
              , requiresAuth
+             , makeTestDeck
              ) where
+
+import BasicPrelude
 
 import Control.Monad.STM (atomically)
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64 as Base64
+import qualified Data.Text as Text
+import Data.IORef
 import Data.Maybe
 
 import Network.HTTP.Types.Header (Header)
@@ -58,10 +65,18 @@ testDeck = fromJust $ makeDeck [
   ]
 
 
-hazardTestApp :: IO Application
-hazardTestApp = do
+
+makeTestApp :: IO ByteString -> IO (Deck Complete) -> IO Application
+makeTestApp passwords decks = do
   hazard <- atomically makeHazard
-  spockAsApp $ spockT id $ hazardWeb' hazard (return "password") (return testDeck)
+  spockAsApp $ spockT id $ hazardWeb' hazard passwords decks
+
+
+hazardTestApp :: IO Application
+hazardTestApp = makeTestApp  (return "password") (return testDeck)
+
+hazardTestApp' :: IORef (Deck Complete) -> IO Application
+hazardTestApp' decks = makeTestApp  (return "password") (readIORef decks)
 
 
 get url = request "GET" url [acceptJson] ""
@@ -88,3 +103,17 @@ requiresAuth = "Basic authentication is required" { matchStatus = 401
                                                     "WWW-Authenticate" <:> "Basic realm=\"Hazard API\""
                                                     ]
                                                   }
+
+
+makeTestDeck :: Text -> Deck Complete
+makeTestDeck =
+  fromJust . makeDeck . map charToCard . textToString . Text.toLower
+  where
+    charToCard 's' = Soldier
+    charToCard 'c' = Clown
+    charToCard 'k' = Knight
+    charToCard 'p' = Priestess
+    charToCard 'w' = Wizard
+    charToCard 'g' = General
+    charToCard 'm' = Minister
+    charToCard 'x' = Prince
