@@ -51,6 +51,7 @@ library
                  , Hazard.HttpAuth
                  , Hazard.Games
                  , Hazard.Model
+                 , Hazard.Routes
                  , Hazard.Users
                  , Hazard.Views
   default-language:    Haskell2010
