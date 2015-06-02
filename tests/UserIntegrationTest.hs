@@ -21,12 +21,12 @@ module UserIntegrationTest (suite) where
 
 import BasicPrelude
 
-import Test.Hspec.Wai
+import Test.Hspec.Wai hiding (get, post)
 import Test.Hspec.Wai.JSON
 import Test.Tasty
 import Test.Tasty.Hspec
 
-import Utils (hazardTestApp, getAs, requiresAuth)
+import Utils (hazardTestApp, get, getAs, post, requiresAuth)
 
 
 suite :: IO TestTree

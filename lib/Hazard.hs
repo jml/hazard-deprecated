@@ -94,7 +94,7 @@ userWeb userDB pwgen = do
 
   get "/users" $ do
     usernames' <- liftIO $ atomically $ usernames userDB
-    json $ map decodeUtf8 usernames'
+    View.users $ map decodeUtf8 usernames'
 
   post "/users" $ do
     userRequest <- expectJSON

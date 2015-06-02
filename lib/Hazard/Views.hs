@@ -21,6 +21,7 @@ module Hazard.Views (
     -- | Pages
   , home
   , games
+  , users
     -- | Errors
   , authenticationRequired
   , badRequest
@@ -31,7 +32,7 @@ module Hazard.Views (
 import BasicPrelude
 
 import Data.Aeson (ToJSON, (.=), object)
-import Data.Foldable (Foldable)
+import Data.Foldable (Foldable, toList)
 import qualified Data.Text as Text
 import Network.HTTP.Types.Status
 import Text.Blaze.Html5 ((!))
@@ -79,10 +80,13 @@ home =
           "This is currently intended as an API server, rather than an "
           "interactive user interface."
         H.h2 "Endpoints"
-        H.ul $
+        H.ul $ do
           H.li $ do
             H.a ! href "/games" $ "/games"
             H.text " – browse and create Hazard games"
+          H.li $ do
+            H.a ! href "/users" $ "/users"
+            H.text " – register an account"
         H.p "The API will change."
         H.h2 "Source code"
         H.ul $ do
@@ -112,8 +116,7 @@ games games' =
         H.pre $ H.text $ unlines [
           "POST /games",
           "",
-          "{ numPlayers = 3, ",
-          "  turnTimeout = 3600 }"
+          "{\"numPlayers\":3,\"turnTimeout\":3600}"
           ]
         H.p $ do
           "will register a game for three players with a turn timeout "
@@ -129,6 +132,58 @@ games games' =
         H.ul $ forM_ gamesLinks selfLink
     gamesLinks = ["/game/" ++ show i | i <- [0..length games' - 1]]
     selfLink url = H.a ! href (H.textValue url) $ H.text url
+
+
+users :: (Foldable f, MonadIO m) => f Text -> View m
+users users' =
+  dualResponse j h
+  where
+    j = toList users'
+    h = H.docTypeHtml $ do
+      H.head $ H.title "Hazard :: Users"
+      H.body $ do
+        H.h1 "/users"
+        H.p "The user system for Hazard is very simple, and is subject to change. "
+        H.p $ do
+          "Users can be created by POSTing to this endpoint. This will create a "
+          "user with the requested name and assign a random password."
+        H.p "Passwords cannot be changed or recovered."
+        H.p $ do
+          "All authentication and user creation is done "
+          H.b "in cleartext"
+          " using basic HTTP authentication."
+        H.h2 "GET"
+        H.p "Returns a list of users."
+        H.h2 "POST"
+        H.p $ do
+          "Will create a user, assign a random password and return a link to "
+          "the user in the "
+          H.code "Location"
+          " header, and the password in the JSON response."
+        H.p "e.g."
+        H.pre $ H.text $ unlines [
+          "POST /users",
+          "",
+          "{\"username\":\"boris\" }"
+          ]
+        H.p $ do
+          "will create a user, "
+          H.code "boris"
+          ", and return the following response: "
+        H.pre $ H.text $ unlines [
+          "HTTP/1.1 201 Created",
+          "Content-Type: text/json",
+          "",
+          "{\"password\":\"A4LVT4NWTY7UHUSY\" }"
+          ]
+        H.p $ do
+          "If the user already exists, will return "
+          H.code "400"
+          " and a JSON message saying so."
+        H.h2 "All users"
+        H.ul $ forM_ userLinks linkToUser
+    userLinks = zip [(0 :: Int)..] (toList users')
+    linkToUser (userId, username) = H.a ! href (H.textValue $ "/user/" ++ show userId) $ H.text username
 
 errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()
 errorMessage code message = do
