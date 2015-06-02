@@ -30,10 +30,9 @@ module Hazard.Games ( GameCreationError(..)
                     , JoinError(..)
                     , PlayError(..)
                     , Seconds
-                    , SlotAction
                     , SlotAction'
-                    , runSlotAction
                     , runSlotAction'
+                    , runSlotActionT
                     , creator
                     , createGame
                     , currentPlayer
@@ -320,8 +319,6 @@ getRound InProgress { rounds = rounds } i = atMay rounds i
 getRound _ _ = Nothing
 
 
-type SlotAction e g p a = StateT (GameSlot p) (EitherT (GameError e) (Rand g)) a
-
 type SlotActionT e p m a = StateT (GameSlot p) (EitherT (GameError e) m) a
 
 type SlotAction' e p a = SlotActionT e p Identity a
@@ -329,10 +326,6 @@ type SlotAction' e p a = SlotActionT e p Identity a
 
 runSlotActionT :: SlotActionT e p m a -> GameSlot p -> m (Either (GameError e) (a, GameSlot p))
 runSlotActionT action slot = runEitherT (runStateT action slot)
-
-
-runSlotAction :: RandomGen g => SlotAction e g p a -> g -> GameSlot p -> Either (GameError e) (a, GameSlot p)
-runSlotAction action gen slot = evalRand (runSlotActionT action slot) gen
 
 
 runSlotAction' :: SlotAction' e p a -> GameSlot p -> Either (GameError e) (a, GameSlot p)
@@ -355,7 +348,7 @@ modifyGame f = do
   put (slot { gameState = game'' })
 
 
-joinSlot :: (RandomGen g, Ord p, Show p) => p -> SlotAction (JoinError p) g p ()
+joinSlot :: (MonadRandom m, Ord p, Show p) => p -> SlotActionT (JoinError p) p m ()
 joinSlot p = modifyGame $ \game ->
   do
     game' <- (fmapLT OtherError . hoistEither . joinGame p) game

@@ -26,13 +26,15 @@ module Hazard ( makeHazard
 import BasicPrelude hiding (round)
 
 import Control.Error
-import Control.Monad.Random (evalRandIO)
+import Control.Monad.Random (evalRand, evalRandIO)
 import Control.Monad.STM (atomically)
 
 import Data.Aeson (FromJSON(..), (.=), object)
 import Network.HTTP.Types.Status
 import Network.Wai (requestMethod, pathInfo)
 import Network.Wai.Middleware.HttpAuth
+
+import System.Random
 import Web.Spock.Safe
 
 import Hazard.HttpAuth (maybeLoggedIn)
@@ -45,8 +47,9 @@ import Hazard.Model (
   getRound,
   makeHazard,
   applySlotAction',
-  performSlotAction,
+  modifySlot,
   runSlotAction',
+  runSlotActionT,
   tryGetSlot,
   users
   )
@@ -176,7 +179,8 @@ hazardWeb' hazard pwgen = do
      Nothing -> View.errorMessage notFound404 ("no such game" :: Text)
 
   post Route.game $ \gameId -> withAuth (users hazard) $ \joiner -> do
-    result <- liftIO $ performSlotAction hazard gameId (joinSlot joiner)
+    stdGen <- liftIO newStdGen
+    result <- liftIO $ atomically $ modifySlot hazard gameId (\slot -> evalRand (runSlotActionT (joinSlot joiner) slot) stdGen)
     case result of
      Left (GameNotFound _) -> View.errorMessage notFound404 ("no such game" :: Text)
      Left (OtherError AlreadyStarted) -> View.badRequest ("Game already started" :: Text)

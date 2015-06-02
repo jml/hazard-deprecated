@@ -21,9 +21,9 @@ module GamesTest (suite) where
 
 import BasicPrelude
 
+import Control.Monad.Random
 import Data.Aeson
 import Data.Aeson.Types (parseEither)
-import System.Random (mkStdGen)
 
 import Test.Tasty
 import Test.Tasty.QuickCheck
@@ -42,7 +42,7 @@ import Hazard.Games (GameCreationRequest(..),
                      numPlayers,
                      players,
                      requestGame,
-                     runSlotAction,
+                     runSlotActionT,
                      turnTimeout,
                      validateCreationRequest)
 
@@ -90,7 +90,7 @@ addPlayers n g =
   where
     addPlayer g' = do
       p <- arbitrary `suchThat` (`notElem` players g')
-      return $ snd $ assertRight' (runSlotAction (joinSlot p) (mkStdGen 42) g')
+      return $ snd $ assertRight' (evalRand (runSlotActionT (joinSlot p) g') (mkStdGen 42))
 
 
 prop_creatorInPlayers :: Eq a => GameSlot a -> Bool
