@@ -32,7 +32,9 @@ import BasicPrelude
 import Data.Aeson (ToJSON, (.=), object)
 import qualified Data.Text as Text
 import Network.HTTP.Types.Status
+import Text.Blaze.Html5 ((!))
 import qualified Text.Blaze.Html5 as H
+import Text.Blaze.Html5.Attributes
 import Text.Blaze.Html.Renderer.Utf8 (renderHtml)
 import Web.Spock.Safe (
   ActionT,
@@ -64,7 +66,22 @@ home =
   dualResponse jsonView htmlView
   where
     jsonView = object ["message" .= ("Hazard API" :: Text)]
-    htmlView = "Hello World"
+    htmlView = H.docTypeHtml $ do
+      H.head $ H.title "Hazard - A dangerous card game"
+      H.body $ do
+        H.h1 "Hazard"
+        H.p "An implementation of a card game you know and love."
+        H.p "This is currently intended as an API server, rather than an \
+            \ interactive user interface."
+        H.p "The API will change."
+        H.h2 "Source code"
+        H.ul $ do
+              H.li $ do
+                H.a ! href "https://github.com/jml/hazard" $ "hazard"
+                " (web API)"
+              H.li $ do
+                H.a ! href "https://github.com/jml/haverer" $ "haverer"
+                " (underlying library)"
 
 
 errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()
