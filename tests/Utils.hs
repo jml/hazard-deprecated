@@ -15,7 +15,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Utils ( hazardTestApp
+             , Utils.get
              , getAs
+             , Utils.post
              , postAs
              , requiresAuth
              ) where
@@ -38,14 +40,23 @@ hazardTestApp = do
   hazard <- atomically makeHazard
   spockAsApp $ spockT id $ hazardWeb' hazard (return "password")
 
-getAs username url = request "GET" url [authHeader username "password"] ""
 
-postAs username url = request "POST" url [authHeader username "password"]
+get url = request "GET" url [acceptJson] ""
+
+post url = request "POST" url [acceptJson]
+
+getAs username url = request "GET" url [authHeader username "password", acceptJson] ""
+
+postAs username url = request "POST" url [authHeader username "password", acceptJson]
 
 
 authHeader :: B.ByteString -> B.ByteString -> Header
 authHeader username password = ("Authorization", B.concat ["Basic ", encodedCredentials])
   where encodedCredentials = Base64.encode $ B.concat [username, ":", password]
+
+
+acceptJson :: Header
+acceptJson = ("Accept", "application/json")
 
 
 requiresAuth :: ResponseMatcher

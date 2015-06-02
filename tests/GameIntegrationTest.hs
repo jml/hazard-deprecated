@@ -28,7 +28,7 @@ import Data.Maybe (fromJust)
 import System.Random
 
 import Network.Wai.Test (SResponse(..), assertStatus, assertContentType)
-import Test.Hspec.Wai
+import Test.Hspec.Wai hiding (get, post)
 import Test.Hspec.Wai.Internal (WaiSession(WaiSession))
 import Test.Hspec.Wai.JSON
 import Test.Tasty
@@ -38,7 +38,7 @@ import Haverer.Action (Play(..))
 import qualified Haverer.Action as Action
 import Haverer.Deck (Card)
 
-import Utils (getAs, hazardTestApp, postAs, requiresAuth)
+import Utils (get, getAs, hazardTestApp, post, postAs, requiresAuth)
 
 
 -- XXX: All of this guff is so we can actually post a valid move once we've
