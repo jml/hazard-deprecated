@@ -45,9 +45,12 @@ import Web.Spock.Safe (
   lazyBytes,
   json,
   preferredFormat,
+  renderRoute,
   setStatus,
   setHeader
   )
+
+import qualified Hazard.Routes as Route
 
 
 dualResponse :: (ToJSON a, MonadIO m) => a -> H.Html -> ActionT m b
@@ -66,6 +69,19 @@ realm = "Hazard API"
 type View m = ActionT m ()
 
 
+-- | A link where the text is the URL.
+--
+-- e.g.
+--  selfLink "/users" === <a href="/users">/users</a>
+selfLink :: Text -> H.Html
+selfLink url = simpleLink url url
+
+
+-- | A link where the URL and the text are both simple text, without markup.
+simpleLink :: Text -> Text -> H.Html
+simpleLink url text = H.a ! href (H.textValue url) $ H.text text
+
+
 home :: MonadIO m => View m
 home =
   dualResponse jsonView htmlView
@@ -82,10 +98,10 @@ home =
         H.h2 "Endpoints"
         H.ul $ do
           H.li $ do
-            H.a ! href "/games" $ "/games"
+            selfLink (renderRoute Route.games)
             H.text " – browse and create Hazard games"
           H.li $ do
-            H.a ! href "/users" $ "/users"
+            selfLink (renderRoute Route.users)
             H.text " – register an account"
         H.p "The API will change."
         H.h2 "Source code"
@@ -130,8 +146,7 @@ games games' =
           "automatically added to the game."
         H.h2 "All games, past and present"
         H.ul $ forM_ gamesLinks selfLink
-    gamesLinks = ["/game/" ++ show i | i <- [0..length games' - 1]]
-    selfLink url = H.a ! href (H.textValue url) $ H.text url
+    gamesLinks = [renderRoute Route.game i | i <- [0..length games' - 1]]
 
 
 users :: (Foldable f, MonadIO m) => f Text -> View m
@@ -183,7 +198,8 @@ users users' =
         H.h2 "All users"
         H.ul $ forM_ userLinks linkToUser
     userLinks = zip [(0 :: Int)..] (toList users')
-    linkToUser (userId, username) = H.a ! href (H.textValue $ "/user/" ++ show userId) $ H.text username
+    linkToUser (userId, username) = simpleLink (renderRoute Route.user userId) username
+
 
 errorMessage :: (MonadIO m, ToJSON a) => Status -> a -> ActionT m ()
 errorMessage code message = do
