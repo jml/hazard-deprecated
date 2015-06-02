@@ -36,7 +36,7 @@ import Network.Wai.Middleware.HttpAuth
 
 import Web.Spock.Safe
 
-import Haverer (newDeck)
+import Haverer (Complete, Deck, newDeck)
 import Hazard.HttpAuth (maybeLoggedIn)
 
 import Hazard.Model (
@@ -148,11 +148,11 @@ withAuth userDB action = maybeLoggedInUser userDB >>= maybe View.authenticationR
 
 
 hazardWeb :: MonadIO m => Hazard -> SpockT m ()
-hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword)
+hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword) (evalRandIO newDeck)
 
 
-hazardWeb' :: MonadIO m => Hazard -> IO ByteString -> SpockT m ()
-hazardWeb' hazard pwgen = do
+hazardWeb' :: MonadIO m => Hazard -> IO ByteString -> IO (Deck Complete) -> SpockT m ()
+hazardWeb' hazard pwgen deckGen = do
   get root View.home
 
   get Route.games $ do
@@ -177,7 +177,7 @@ hazardWeb' hazard pwgen = do
      Nothing -> View.errorMessage notFound404 ("no such game" :: Text)
 
   post Route.game $ \gameId -> withAuth (users hazard) $ \joiner -> do
-    deck <- liftIO $ evalRandIO newDeck
+    deck <- liftIO deckGen
     result <- liftIO $ atomically $ applySlotAction hazard gameId (joinSlot deck joiner)
     case result of
      Left (GameNotFound _) -> View.errorMessage notFound404 ("no such game" :: Text)

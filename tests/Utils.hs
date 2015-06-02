@@ -26,19 +26,42 @@ import Control.Monad.STM (atomically)
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base64 as Base64
+import Data.Maybe
 
 import Network.HTTP.Types.Header (Header)
 import Network.Wai (Application)
 import Test.Hspec.Wai
 import Web.Spock.Safe (spockAsApp, spockT)
 
+import Haverer.Deck
 import Hazard (hazardWeb', makeHazard)
+
+
+testDeck :: Deck Complete
+testDeck = fromJust $ makeDeck [
+  Soldier
+  , Soldier
+  , Clown
+  , Minister
+  , Wizard
+  , Wizard
+  , Soldier
+  , Knight
+  , Knight
+  , Priestess
+  , Clown
+  , Soldier
+  , General
+  , Soldier
+  , Priestess
+  , Prince
+  ]
 
 
 hazardTestApp :: IO Application
 hazardTestApp = do
   hazard <- atomically makeHazard
-  spockAsApp $ spockT id $ hazardWeb' hazard (return "password")
+  spockAsApp $ spockT id $ hazardWeb' hazard (return "password") (return testDeck)
 
 
 get url = request "GET" url [acceptJson] ""
