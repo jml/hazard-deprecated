@@ -206,16 +206,18 @@ roundToJSON :: (Ord a, ToJSON a) => Maybe a -> Round a -> Value
 roundToJSON someone round =
   object $ [ "players" .= (map playerToJSON' .  Map.assocs . getPlayerMap) round
            , "currentPlayer" .= currentPlayer round
-           ] ++ (("dealtCard" .=) <$> justZ (getDealt someone round))
-  where playerToJSON' = uncurry (playerToJSON someone)
+           ] ++ msum [("dealtCard" .=) <$> justZ getDealt
+                     ,("winners" .=) <$> justZ getWinners]
+  where
+    playerToJSON' = uncurry (playerToJSON someone)
 
+    getDealt = do
+      (pid, (dealt, _)) <- justZ (currentTurn round)
+      viewer <- someone
+      guard (viewer == pid)
+      return dealt
 
-getDealt :: (MonadPlus m, Ord a) => m a -> Round a -> m Card
-getDealt someone round = do
-  (pid, (dealt, _)) <- justZ (currentTurn round)
-  viewer <- someone
-  guard (viewer == pid)
-  return dealt
+    getWinners = Round.getWinners <$> Round.victory round
 
 
 playerToJSON :: (Eq a, ToJSON a) => Maybe a -> a -> Player -> Value

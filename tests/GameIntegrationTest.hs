@@ -139,6 +139,18 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
                players: [1, 0],
                scores: [0, 0]}|] {matchStatus = 200}
 
+    it "Same data on GET after POST" $ do
+      game <- makeGameAs "foo" 2
+      post "/users" [json|{username: "bar"}|]
+      postAs "bar" game [json|null|]
+      get game `shouldRespondWith`
+        [json|{numPlayers: 2,
+               turnTimeout: 3600,
+               creator: 0,
+               state: "in-progress",
+               players: [1, 0],
+               scores: [0, 0]}|] {matchStatus = 200}
+
 
   describe "Playing a game" $ do
     it "Rounds don't exist for unstarted game (GET)" $ do
@@ -241,6 +253,47 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
           user = encodeUtf8 baz
       postAs user roundUrl [json|{card: "wizard", target: 2}|]
         `shouldRespondWith` [json|{id: 2, result: "forced-discard", card: "Wizard", target: 2}|]
+
+    it "ending round reports winner correctly" $ do
+      -- XXX: Deals cards, then burns, then draws. Really should be burn, deal draw.
+      -- XXX: Players are 0, 1. Player 1 "goes" first, and is dealt the first
+      -- card from the deck.
+      let deck = makeTestDeck "skcmwwskspcsgspx"
+      (game, [_, bar]) <- makeStartedGame' 2 deck
+      let roundUrl = game ++ "/round/0"
+          user = encodeUtf8 bar
+      postAs user roundUrl [json|{card: "soldier", target: 0, guess: "knight"}|]
+        `shouldRespondWith`
+        [json|{id: 1, result: "eliminated", card: "Soldier", guess: "Knight", target: 0, eliminated: 0}|]
+        { matchStatus = 200 }
+      -- XXX: burnt card
+      -- XXX: survivors
+
+      -- XXX: Maybe the testing strategy here should be to test various
+      -- serializations of Round, and use the Haverer testing library to
+      -- generate rounds in the states we find interesting?
+      getAs user roundUrl `shouldRespondWith`
+        [json|
+         {currentPlayer: null,
+          winners: [1],
+          players: [
+            {protected:null,
+             active:false,
+             id:0,
+             discards:["Knight"]
+            },
+            {protected:false,
+             active:true,
+             id:1,
+             hand:"Minister",
+             discards:["Soldier"]
+            }
+            ]}|] { matchStatus = 200 }
+
+      -- TODO: Test that score has changed
+      -- TODO: Test that POSTing to round/0 fails
+      -- TODO: Test that POSTing to round/1 works
+      -- TODO: Test that there's interesting history available at round/0
 
   where
     makeGameAs :: Text -> Int -> WaiSession ByteString
