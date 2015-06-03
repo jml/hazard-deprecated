@@ -318,7 +318,21 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
         [json|{"creator":0,"state":"in-progress","players":[1,0],"scores":[0,1],"turnTimeout":3600,"numPlayers":2}|]
         { matchStatus = 200 }
 
-      -- TODO: Test that POSTing to round/1 works
+    it "creates new round after previous is over" $ do
+      let deck = makeTestDeck "skcmwwskspcsgspx"
+      (game, [_, bar]) <- makeStartedGame' 2 deck
+      let roundUrl = game ++ "/round/0"
+          user = encodeUtf8 bar
+      postAs user roundUrl [json|{card: "soldier", target: 0, guess: "knight"}|]
+        `shouldRespondWith`
+        [json|{id: 1, result: "eliminated", card: "Soldier", guess: "Knight", target: 0, eliminated: 0}|]
+        { matchStatus = 200 }
+      let roundUrl2 = game ++ "/round/1"
+      postAs user roundUrl2 [json|{card: "soldier", target: 0, guess: "knight"}|]
+        `shouldRespondWith`
+        [json|{id: 1, result: "eliminated", card: "Soldier", guess: "Knight", target: 0, eliminated: 0}|]
+        { matchStatus = 200 }
+
       -- TODO: Test that there's interesting history available at round/0
 
   where

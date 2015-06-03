@@ -387,25 +387,27 @@ validatePlayRequest player roundId request = do
   return request
 
 
-playSlot :: (Ord a, Show a) => Maybe (PlayRequest a) -> SlotAction (PlayError a) a (Result a)
-playSlot playRequest = do
-  slot <- get
-  case gameState slot of
+playSlot :: (Ord a, Show a) => Deck Complete -> Maybe (PlayRequest a) -> SlotAction (PlayError a) a (Result a)
+playSlot deck playRequest = do
+  currentState <- gameState <$> get
+  case currentState of
    Pending {} -> throwOtherError NotStarted
    Ready {} -> throwOtherError NotStarted
-   currentState@(InProgress {..}) -> do
-     let round = head rounds
+   InProgress {} -> do
+     let round = last . rounds $ currentState
      (result, round') <- playTurnOn round playRequest
-     put (slot { gameState = currentState { rounds = round':tail rounds } })
+     modify $ \s -> s { gameState = (gameState s) { rounds = init (rounds . gameState $ s) ++ [round'] } }
      case Round.victory round' of
       Nothing -> return ()
-      Just victory ->
-        case H.playersWon game (Round.getWinners victory) of
+      Just victory -> do
+        game' <- game . gameState <$> get
+        case H.playersWon game' (Round.getWinners victory) of
          Left _ -> error "jml is lazy"
-         Right game' -> do
-           slot' <- get
-           put (slot' { gameState = (gameState slot') { game = game' } })
-
+         Right game'' -> do
+           modify $ \s -> s { gameState = (gameState s) { game = game'' } }
+           modify $ \s -> s { gameState = addRound (H.newRound' (game . gameState $ s) deck) (gameState s) }
      return result
-  where requestToPlay (PlayRequest card p) = (card, p)
-        playTurnOn round = liftEither . fmapLT BadAction . hoistEither . Round.playTurn' round . fmap requestToPlay
+  where
+    requestToPlay (PlayRequest card p) = (card, p)
+    playTurnOn round = liftEither . fmapLT BadAction . hoistEither . Round.playTurn' round . fmap requestToPlay
+    addRound round toState = toState { rounds = rounds toState ++ [round] }

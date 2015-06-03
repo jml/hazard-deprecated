@@ -195,13 +195,13 @@ hazardWeb' hazard pwgen deckGen = do
   post Route.round $ \gameId roundId ->
     withAuth (users hazard) $ \poster -> do
     playRequest <- expectJSON
-
+    deck <- liftIO deckGen
     result <- liftIO $ atomically $ runEitherT $ do
       slot <- tryGetSlot hazard gameId
       -- TODO: Use types to enforce validated play requests
       let validation = validatePlayRequest poster roundId playRequest
       playRequest' <- hoistEither $ fst <$> runSlotAction validation slot
-      result <- lift $ applySlotAction hazard gameId (playSlot playRequest')
+      result <- lift $ applySlotAction hazard gameId (playSlot deck playRequest')
       hoistEither $ fst <$> result
 
     case result of
