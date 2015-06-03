@@ -180,7 +180,7 @@ data Game a = Pending { _numPlayers :: Int
             deriving (Show)
 
 
-instance ToJSON a => ToJSON (GameSlot a) where
+instance (Ord a, ToJSON a) => ToJSON (GameSlot a) where
   toJSON slot =
     object (specificFields ++ commonFields)
     where
@@ -188,9 +188,9 @@ instance ToJSON a => ToJSON (GameSlot a) where
         case gameState slot of
          Pending {} -> ["state" .= ("pending" :: Text)]
          Ready {} -> ["state" .= ("pending" :: Text)]
-         InProgress {} -> [ "state" .= ("in-progress" :: Text)
-                          , "scores" .= replicate (length (players slot)) (0 :: Int)
-                          ]
+         InProgress {..} -> [ "state" .= ("in-progress" :: Text)
+                            , "scores" .= map snd (H.scores game)
+                            ]
       commonFields = [ "turnTimeout" .= turnTimeout slot
                      , "creator" .= creator slot
                      , "numPlayers" .= numPlayers slot
@@ -393,10 +393,19 @@ playSlot playRequest = do
   case gameState slot of
    Pending {} -> throwOtherError NotStarted
    Ready {} -> throwOtherError NotStarted
-   InProgress {..} -> do
+   currentState@(InProgress {..}) -> do
      let round = head rounds
      (result, round') <- playTurnOn round playRequest
-     put (slot { gameState = InProgress { game = game, rounds = round':tail rounds } })
+     put (slot { gameState = currentState { rounds = round':tail rounds } })
+     case Round.victory round' of
+      Nothing -> return ()
+      Just victory ->
+        case H.playersWon game (Round.getWinners victory) of
+         Left _ -> error "jml is lazy"
+         Right game' -> do
+           slot' <- get
+           put (slot' { gameState = (gameState slot') { game = game' } })
+
      return result
   where requestToPlay (PlayRequest card p) = (card, p)
         playTurnOn round = liftEither . fmapLT BadAction . hoistEither . Round.playTurn' round . fmap requestToPlay
