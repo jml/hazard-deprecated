@@ -60,7 +60,9 @@ import Control.Monad.State
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..))
 import qualified Data.Map as Map
 import qualified Data.Text as Text
+import Web.Spock.Safe (renderRoute)
 
+import qualified Hazard.Routes as Route
 import Hazard.Users (UserID, toJSONKey)
 
 import Haverer (
@@ -200,6 +202,7 @@ instance ToJSON GameSlot where
          Pending {} -> ["state" .= ("pending" :: Text)]
          Ready {} -> ["state" .= ("pending" :: Text)]
          InProgress {..} -> [ "state" .= ("in-progress" :: Text)
+                            , "currentRound" .= renderRoute Route.round (gameID slot) (length rounds - 1)
                             ]
          Finished {..} -> [ "state" .= ("finished" :: Text)
                           , "winners" .= H.winners _outcome
