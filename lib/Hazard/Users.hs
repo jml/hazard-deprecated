@@ -132,16 +132,17 @@ authenticate userDB username password = do
 addUser :: UserDB -> UserCreationRequest -> ByteString -> STM (Maybe UserID)
 addUser userDB req password =
   let username = encodeUtf8 (reqUsername req)
-      newUser = User (UserID 0) username password
       users' = unUserDB userDB
   in do
     existing <- getUserByName userDB username
     case existing of
-      Nothing  -> do
-        allUsers <- readTVar users'
-        writeTVar users' (V.snoc allUsers newUser)
-        return $ Just $ UserID $ length allUsers
-      _ -> return Nothing
+     Just _ -> return Nothing
+     Nothing  -> do
+       allUsers <- readTVar users'
+       let newID = UserID (length allUsers)
+       let newUser = User newID username password
+       writeTVar users' (V.snoc allUsers newUser)
+       return $ Just newID
 
 
 makePassword :: RandomGen g => Rand g ByteString
