@@ -44,40 +44,45 @@ import Hazard.Games (
   SlotAction,
   runSlotAction
   )
-import Hazard.Users (UserDB, makeUserDB)
+import Hazard.Users (UserDB, UserID, makeUserDB)
 
 
-data Hazard = Hazard { games :: TVar (Vector (GameSlot Int))
+data Hazard = Hazard { games :: TVar (Vector GameSlot)
                      , users :: UserDB
                      }
+
+
+type GameID = Int
+
+type RoundID = Int
 
 
 makeHazard :: STM Hazard
 makeHazard = Hazard <$> newTVar empty <*> makeUserDB
 
 
-getGames :: Hazard -> STM (Vector (GameSlot Int))
+getGames :: Hazard -> STM (Vector GameSlot)
 getGames = readTVar . games
 
 
-getGameSlot :: Hazard -> Int -> STM (Maybe (GameSlot Int))
+getGameSlot :: Hazard -> GameID -> STM (Maybe GameSlot)
 getGameSlot hazard i = do
   games' <- readTVar (games hazard)
   return $ games' !? i
 
 
-tryGetSlot :: Hazard -> Int -> EitherT (GameError e) STM (GameSlot Int)
+tryGetSlot :: Hazard -> GameID -> EitherT (GameError e) STM GameSlot
 tryGetSlot hazard i = do
   games' <- lift $ readTVar (games hazard)
   (games' !? i) ?? GameNotFound i
 
 
-getRound :: Hazard -> Int -> Int -> STM (Maybe (Round Int))
+getRound :: Hazard -> GameID -> RoundID -> STM (Maybe (Round UserID))
 getRound hazard i j =
   (fmap . (=<<)) (flip Games.getRound j . Games.gameState) (getGameSlot hazard i)
 
 
-addGame :: Hazard -> GameSlot Int -> STM (Int, GameSlot Int)
+addGame :: Hazard -> GameSlot -> STM (Int, GameSlot)
 addGame hazard game = do
   let allGames = games hazard
   games' <- readTVar allGames
@@ -85,10 +90,10 @@ addGame hazard game = do
   return (length games', game)
 
 
-type SlotResult e a = Either (GameError e) (a, GameSlot Int)
+type SlotResult e a = Either (GameError e) (a, GameSlot)
 
 
-modifySlot :: Hazard -> Int -> (GameSlot Int -> SlotResult e a) -> STM (SlotResult e a)
+modifySlot :: Hazard -> GameID -> (GameSlot -> SlotResult e a) -> STM (SlotResult e a)
 modifySlot hazard i f = runEitherT $ do
   slot <- tryGetSlot hazard i
   (a, slot') <- hoistEither $ f slot
@@ -101,5 +106,5 @@ modifySlot hazard i f = runEitherT $ do
       \games' -> games' // [(i, game)]
 
 
-applySlotAction :: Hazard -> Int -> SlotAction e Int a -> STM (SlotResult e a)
+applySlotAction :: Hazard -> GameID -> SlotAction e a -> STM (SlotResult e a)
 applySlotAction hazard i action = modifySlot hazard i (runSlotAction action)

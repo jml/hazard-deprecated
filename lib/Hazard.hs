@@ -73,7 +73,7 @@ import Hazard.Users (
   getUserByID,
   getUserIDByName,
   makePassword,
-  usernames
+  getAllUsers
   )
 
 
@@ -96,8 +96,8 @@ userWeb userDB pwgen = do
                                                    authIsProtected = isProtected })
 
   get Route.users $ do
-    usernames' <- liftIO $ atomically $ usernames userDB
-    View.users $ map decodeUtf8 usernames'
+    users' <- liftIO $ atomically $ getAllUsers userDB
+    View.users $ map (second decodeUtf8) users'
 
   post Route.users $ do
     userRequest <- expectJSON

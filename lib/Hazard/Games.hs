@@ -60,6 +60,8 @@ import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 
+import Hazard.Users (UserID)
+
 import Haverer (
   Card(..),
   Complete,
@@ -89,18 +91,18 @@ data GameError a = GameNotFound Int
                  | OtherError a
                  deriving (Show)
 
-data JoinError a = AlreadyStarted
-                 | InvalidPlayers (P.Error a)
-                 deriving (Eq, Show)
+data JoinError = AlreadyStarted
+               | InvalidPlayers (P.Error UserID)
+               deriving (Eq, Show)
 
-data PlayError a = NotStarted
-                 | PlayNotSpecified
-                 | BadAction (Round.BadAction a)
-                 | NotYourTurn a a
-                 | NotInGame a
-                 | RoundNotFound Int
-                 | RoundNotActive
-                 deriving (Show)
+data PlayError = NotStarted
+               | PlayNotSpecified
+               | BadAction (Round.BadAction UserID)
+               | NotYourTurn UserID UserID
+               | NotInGame UserID
+               | RoundNotFound Int
+               | RoundNotActive
+               deriving (Show)
 
 
 type Seconds = Int
@@ -142,10 +144,10 @@ validateCreationRequest (GameCreationRequest { .. })
   | otherwise = return $ GameCreationRequest reqNumPlayers reqTurnTimeout
 
 
-data PlayRequest a = PlayRequest Card (Play a) deriving (Eq, Show)
+data PlayRequest = PlayRequest Card (Play UserID) deriving (Eq, Show)
 
 
-instance FromJSON a => FromJSON (PlayRequest a) where
+instance FromJSON PlayRequest where
   parseJSON (Object v) = do
     -- XXX: Find out how to do this all in one line into a tuple using
     -- applicative functor
@@ -163,24 +165,24 @@ instance FromJSON a => FromJSON (PlayRequest a) where
 -- | Represents a single game.
 --
 -- Pretty much all of the interesting state about the game is in 'Game'.
-data GameSlot a = GameSlot {
+data GameSlot = GameSlot {
   turnTimeout :: Seconds,
-  creator :: a,
-  gameState :: Game a
+  creator :: UserID,
+  gameState :: Game
   } deriving (Show)
 
 
-data Game a = Pending { _numPlayers :: Int
-                      , _players :: [a]
-                      }
-            | Ready { _playerSet :: P.PlayerSet a }
-            | InProgress { game :: H.Game a
-                         , rounds :: [Round a]
-                         }
-            deriving (Show)
+data Game = Pending { _numPlayers :: Int
+                    , _players :: [UserID]
+                    }
+          | Ready { _playerSet :: P.PlayerSet UserID }
+          | InProgress { game :: H.Game UserID
+                       , rounds :: [Round UserID]
+                       }
+          deriving (Show)
 
 
-instance (Ord a, ToJSON a) => ToJSON (GameSlot a) where
+instance ToJSON GameSlot where
   toJSON slot =
     object (specificFields ++ commonFields)
     where
@@ -289,7 +291,7 @@ instance FromJSON Card where
   parseJSON _ = mzero
 
 
-createGame :: a -> GameCreationRequest 'Valid -> GameSlot a
+createGame :: UserID -> GameCreationRequest 'Valid -> GameSlot
 createGame userId request = GameSlot { turnTimeout = reqTurnTimeout request
                                      , creator = userId
                                      , gameState = Pending { _numPlayers = reqNumPlayers request
@@ -298,7 +300,7 @@ createGame userId request = GameSlot { turnTimeout = reqTurnTimeout request
                                      }
 
 
-numPlayers :: GameSlot a -> Int
+numPlayers :: GameSlot -> Int
 numPlayers =
   numPlayers' . gameState
   where numPlayers' (Pending { _numPlayers = _numPlayers }) = _numPlayers
@@ -306,7 +308,7 @@ numPlayers =
         numPlayers' (InProgress { game = game' }) = (length . toPlayers . H.players) game'
 
 
-players :: GameSlot a -> [a]
+players :: GameSlot -> [UserID]
 players =
   players' . gameState
   where players' (Pending { _players = _players }) = _players
@@ -314,21 +316,21 @@ players =
         players' (InProgress { game = game }) = (toPlayers . H.players) game
 
 
-getRound :: Game a -> Int -> Maybe (Round a)
+getRound :: Game -> Int -> Maybe (Round UserID)
 getRound InProgress { rounds = rounds } i = atMay rounds i
 getRound _ _ = Nothing
 
 
-type SlotActionT e p m a = StateT (GameSlot p) (EitherT (GameError e) m) a
+type SlotActionT e m a = StateT GameSlot (EitherT (GameError e) m) a
 
-type SlotAction e p a = SlotActionT e p Identity a
+type SlotAction e a = SlotActionT e Identity a
 
 
-runSlotActionT :: SlotActionT e p m a -> GameSlot p -> m (Either (GameError e) (a, GameSlot p))
+runSlotActionT :: SlotActionT e m a -> GameSlot -> m (Either (GameError e) (a, GameSlot))
 runSlotActionT action slot = runEitherT (runStateT action slot)
 
 
-runSlotAction :: SlotAction e p a -> GameSlot p -> Either (GameError e) (a, GameSlot p)
+runSlotAction :: SlotAction e a -> GameSlot -> Either (GameError e) (a, GameSlot)
 runSlotAction action slot = runIdentity $ runSlotActionT action slot
 
 
@@ -340,7 +342,7 @@ throwOtherError :: MonadError (GameError e) m => e -> m a
 throwOtherError = throwError . OtherError
 
 
-modifyGame :: Monad m => (Game a -> EitherT (GameError e) m (Game a)) -> SlotActionT e a m ()
+modifyGame :: Monad m => (Game -> EitherT (GameError e) m Game) -> SlotActionT e m ()
 modifyGame f = do
   slot <- get
   let game = gameState slot
@@ -348,7 +350,7 @@ modifyGame f = do
   put (slot { gameState = game'' })
 
 
-joinSlot :: (Ord p, Show p) => Deck Complete -> p -> SlotAction (JoinError p) p ()
+joinSlot :: Deck Complete -> UserID -> SlotAction JoinError ()
 joinSlot deck p = modifyGame $ \game ->
   do
     game' <- (fmapLT OtherError . hoistEither . joinGame p) game
@@ -357,7 +359,7 @@ joinSlot deck p = modifyGame $ \game ->
      _ -> return game'
 
 
-joinGame :: (Show a, Ord a) => a -> Game a -> Either (JoinError a) (Game a)
+joinGame :: UserID -> Game -> Either JoinError Game
 joinGame _ (InProgress {}) = throwError AlreadyStarted
 joinGame _ (Ready {}) = throwError AlreadyStarted
 joinGame p g@(Pending {..})
@@ -370,14 +372,14 @@ joinGame p g@(Pending {..})
         numNewPlayers = length newPlayers
 
 
-makeGame :: (Show a, Ord a) => Deck Complete -> P.PlayerSet a -> Game a
+makeGame :: Deck Complete -> P.PlayerSet UserID -> Game
 makeGame deck playerSet = do
   let game = H.makeGame playerSet
   let round = H.newRound' game deck
   InProgress { game = game, rounds = pure round }
 
 
-validatePlayRequest :: Eq a => a -> Int -> Maybe (PlayRequest a) -> SlotAction (PlayError a) a (Maybe (PlayRequest a))
+validatePlayRequest :: UserID -> Int -> Maybe PlayRequest -> SlotAction PlayError (Maybe PlayRequest)
 validatePlayRequest player roundId request = do
   game <- gameState <$> get
   round <- liftEither $ getRound game roundId ?? RoundNotFound roundId
@@ -387,7 +389,7 @@ validatePlayRequest player roundId request = do
   return request
 
 
-playSlot :: (Ord a, Show a) => Deck Complete -> Maybe (PlayRequest a) -> SlotAction (PlayError a) a (Result a)
+playSlot :: Deck Complete -> Maybe PlayRequest -> SlotAction PlayError (Result UserID)
 playSlot deck playRequest = do
   currentState <- gameState <$> get
   case currentState of

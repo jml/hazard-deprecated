@@ -28,8 +28,8 @@ module Hazard.Routes (
   round
   ) where
 
-
 import BasicPrelude hiding (round)
+import Hazard.Users (UserID)
 import Web.Spock.Safe
 
 
@@ -39,9 +39,8 @@ users = static "users"
 
 
 -- | Page for a single user.
-user :: Path '[Int]
+user :: Path '[UserID]
 user = "user" <//> var
-
 
 -- | Endpoint for creating and managing games.
 games :: Path '[]

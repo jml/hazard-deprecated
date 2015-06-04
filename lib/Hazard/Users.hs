@@ -12,6 +12,8 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -23,31 +25,48 @@ module Hazard.Users ( UserDB
                     , getUserIDByName
                     , makeUserDB
                     , makePassword
-                    , usernames
+                    , getAllUsers
                     ) where
 
 import BasicPrelude
 
 import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar)
+import Control.Error hiding ((!?))
 import Control.Monad.STM (STM)
 import Control.Monad.Random (Rand, uniform)
 import qualified Data.ByteString as B
 import Data.Vector ((!?))
 import qualified Data.Vector as V
 import System.Random (RandomGen)
+import Web.PathPieces (PathPiece)
 
-import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object), object, (.:))
+import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object, String), object, (.:))
+import Test.Tasty.QuickCheck (Arbitrary, arbitrary)
 
 
 -- TODO: Stored as username / password. Password is in the clear, which is
 -- terrible.  jml/hazard#4
 data User = User ByteString ByteString
 
-type UserID = Int
-
-
 instance ToJSON User where
   toJSON (User u _) = object ["username" .= decodeUtf8 u]
+
+
+newtype UserID = UserID Int deriving (Eq, Ord, Show, PathPiece)
+
+
+instance ToJSON UserID where
+  toJSON (UserID i) = toJSON (show i)
+
+
+instance FromJSON UserID where
+  parseJSON (String userId) = UserID <$> (readZ . textToString $ userId)
+  parseJSON _ = mzero
+
+
+instance Arbitrary UserID where
+  arbitrary = UserID <$> arbitrary
+
 
 data UserCreationRequest = UserCreationRequest { reqUsername :: Text }
 
@@ -65,13 +84,16 @@ newtype UserDB = UserDB { unUserDB :: TVar (Vector User) }
 makeUserDB :: STM UserDB
 makeUserDB = UserDB <$> newTVar empty
 
-usernames :: UserDB -> STM (Vector ByteString)
-usernames = fmap (map username) . readTVar . unUserDB
-            where username (User u _) = u
+
+getAllUsers :: UserDB -> STM [(UserID, ByteString)]
+getAllUsers db = do
+  users <- readTVar (unUserDB db)
+  return [(UserID uid, getUsername user) | (uid, user) <- zip [0..] (V.toList users)]
+  where getUsername (User u _) = u
 
 
 getUserByID :: UserDB -> UserID -> STM (Maybe User)
-getUserByID userDB i = do
+getUserByID userDB (UserID i) = do
   allUsers <- readTVar (unUserDB userDB)
   return $ allUsers !? i
 
@@ -85,7 +107,7 @@ getUserByName userDB username = do
 getUserIDByName :: UserDB -> ByteString -> STM (Maybe UserID)
 getUserIDByName userDB username = do
   allUsers <- readTVar (unUserDB userDB)
-  return $ V.findIndex (\(User u _) -> u == username) allUsers
+  return $ UserID <$> V.findIndex (\(User u _) -> u == username) allUsers
 
 
 authenticate :: UserDB -> ByteString -> ByteString -> STM (Maybe User)
@@ -108,7 +130,7 @@ addUser userDB req password =
      case V.find (\(User u _) -> u == username) allUsers of
       Nothing  -> do
         writeTVar users' (V.snoc allUsers newUser)
-        return $ Just $ length allUsers
+        return $ Just $ UserID $ length allUsers
       _ -> return Nothing
 
 
