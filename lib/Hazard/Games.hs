@@ -39,6 +39,8 @@ module Hazard.Games ( GameCreationError(..)
                     , createGame
                     , currentPlayer
                     , gameState
+                    , getAllRounds
+                    , getCurrentRound
                     , getRound
                     , getPlayers
                     , joinSlot
@@ -341,6 +343,21 @@ getRound :: Game -> Int -> Maybe (Round UserID)
 getRound InProgress { rounds = rounds } i = atMay rounds i
 getRound Finished { rounds = rounds } i = atMay rounds i
 getRound _ _ = Nothing
+
+
+getAllRounds :: GameSlot -> [(RoundID, Round UserID)]
+getAllRounds slot =
+  case gameState slot of
+   InProgress { rounds = rounds } -> zip [0..] rounds
+   Finished { rounds = rounds } -> zip [0..] rounds
+   _ -> []
+
+
+getCurrentRound :: GameSlot -> Maybe (RoundID, Round UserID)
+getCurrentRound slot =
+  case gameState slot of
+   InProgress {} -> Just $ last (getAllRounds slot)
+   _ -> Nothing
 
 
 getScores :: Game -> Map UserID (Maybe Int)

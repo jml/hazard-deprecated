@@ -53,7 +53,7 @@ import Web.Spock.Safe (
   )
 
 import Hazard.Users (UserID)
-import Hazard.Games (GameSlot)
+import Hazard.Games (GameSlot, getAllRounds, getCurrentRound)
 import qualified Hazard.Routes as Route
 
 
@@ -165,6 +165,9 @@ game i g =
         "/game/"
         H.text $ show i
       H.p "Endpoint for a game of Hazard."
+      case getCurrentRound g of
+       Just (roundID, _) -> simpleLink (renderRoute Route.round i roundID) "Current round"
+       Nothing -> empty
       H.h2 "GET"
       H.p "Returns the current state of the game."
       jsonExample g
@@ -189,6 +192,11 @@ game i g =
         " if the game has already started, or already finished."
       H.p "e.g"
       H.pre $ H.text "{\"message\":\"Game already started\"}"
+      let allRounds = getAllRounds g
+      if null allRounds
+        then empty
+        else do H.h2 "Rounds"
+                H.ul $ forM_ allRounds (H.li . selfLink . renderRoute Route.round i . fst)
 
 
 jsonExample :: ToJSON a => a -> H.Html
