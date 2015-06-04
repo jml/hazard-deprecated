@@ -46,7 +46,6 @@ library
                , mtl >= 2.2 && <2.3
                , vector >= 0.10.12 && <0.11
                , path-pieces
-               , scientific
                , blaze-html
                , haverer
   exposed-modules: Hazard

@@ -31,6 +31,7 @@ module Hazard.Users ( UserDB
 import BasicPrelude
 
 import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar)
+import Control.Error hiding ((!?))
 import Control.Monad.STM (STM)
 import Control.Monad.Random (Rand, uniform)
 import qualified Data.ByteString as B
@@ -39,8 +40,7 @@ import qualified Data.Vector as V
 import System.Random (RandomGen)
 import Web.PathPieces (PathPiece)
 
-import qualified Data.Scientific as Scientific
-import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Number, Object), object, (.:))
+import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object, String), object, (.:))
 
 
 -- TODO: Stored as username / password. Password is in the clear, which is
@@ -55,14 +55,11 @@ newtype UserID = UserID Int deriving (Eq, Ord, Show, PathPiece)
 
 
 instance ToJSON UserID where
-  toJSON (UserID i) = toJSON i
+  toJSON (UserID i) = toJSON (show i)
 
 
 instance FromJSON UserID where
-  parseJSON (Number userId) =
-    case Scientific.floatingOrInteger userId of
-     Left _ -> mzero
-     Right i -> return $ UserID i
+  parseJSON (String userId) = UserID <$> (readZ . textToString $ userId)
   parseJSON _ = mzero
 
 
