@@ -46,6 +46,7 @@ import Hazard.Games (
   GameError(..),
   Validated(..),
   SlotAction,
+  RoundID,
   runSlotAction
   )
 import Hazard.Users (UserDB, UserID, makeUserDB)
@@ -54,9 +55,6 @@ import Hazard.Users (UserDB, UserID, makeUserDB)
 data Hazard = Hazard { games :: TVar (Vector GameSlot)
                      , users :: UserDB
                      }
-
-
-type RoundID = Int
 
 
 makeHazard :: STM Hazard

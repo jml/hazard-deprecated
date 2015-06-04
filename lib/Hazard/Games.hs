@@ -30,6 +30,7 @@ module Hazard.Games ( GameCreationError(..)
                     , Game(Pending, InProgress)
                     , JoinError(..)
                     , PlayError(..)
+                    , RoundID
                     , Seconds
                     , SlotAction
                     , runSlotAction
@@ -111,6 +112,7 @@ data PlayError = NotStarted
 
 
 type GameID = Int
+type RoundID = Int
 
 type Seconds = Int
 
