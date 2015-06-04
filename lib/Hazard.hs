@@ -107,7 +107,8 @@ userWeb userDB pwgen = do
      Just newID' -> do
        setStatus created201
        setHeader "Location" (renderRoute Route.user newID')
-       json (object ["password" .= decodeUtf8 password])
+       json (object ["password" .= decodeUtf8 password
+                    ,"id" .= newID'])
      Nothing -> View.badRequest ("username already exists" :: Text)
 
   get Route.user $ \userID -> do
