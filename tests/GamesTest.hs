@@ -29,6 +29,7 @@ import Test.Tasty.QuickCheck
 
 import Haverer.Internal.Error
 import Haverer.Deck (Card(..))
+import Haverer.Player ()
 import Haverer.Testing ()
 
 import Hazard.Games (GameCreationRequest(..),
