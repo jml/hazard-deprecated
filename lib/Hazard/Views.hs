@@ -21,6 +21,7 @@ module Hazard.Views (
     -- | Pages
   , home
   , games
+  , game
   , users
     -- | Errors
   , authenticationRequired
@@ -31,7 +32,8 @@ module Hazard.Views (
 
 import BasicPrelude
 
-import Data.Aeson (ToJSON, (.=), object)
+import Data.Aeson (ToJSON, (.=), encode, object)
+import Data.ByteString.Lazy (toStrict)
 import Data.Foldable (Foldable, toList)
 import qualified Data.Text as Text
 import Network.HTTP.Types.Status
@@ -51,6 +53,7 @@ import Web.Spock.Safe (
   )
 
 import Hazard.Users (UserID)
+import Hazard.Games (GameSlot)
 import qualified Hazard.Routes as Route
 
 
@@ -146,8 +149,50 @@ games games' =
           "The creator of the game is the logged-in user, who is also "
           "automatically added to the game."
         H.h2 "All games, past and present"
-        H.ul $ forM_ gamesLinks selfLink
+        H.ul $ forM_ gamesLinks (H.li . selfLink)
     gamesLinks = [renderRoute Route.game i | i <- [0..length games' - 1]]
+
+
+game :: MonadIO m => Int -> GameSlot -> View m
+game i g =
+  dualResponse g $
+  H.docTypeHtml $ do
+    H.head $ H.title $ do
+      "Hazard :: Game "
+      H.text $ show i
+    H.body $ do
+      H.h1 $ do
+        "/game/"
+        H.text $ show i
+      H.p "Endpoint for a game of Hazard."
+      H.h2 "GET"
+      H.p "Returns the current state of the game."
+      jsonExample g
+      H.h2 "POST"
+      H.p "Join the game as the logged in user"
+      H.p "e.g."
+      H.pre $ H.text $ unlines [
+        "POST /games",
+        ""
+        ]
+      H.p $ do
+        "If successful, will respond with "
+        H.code "200"
+        " and a representation of the game, indicating that the player has joined."
+      H.p $ do
+        "If the player has already joined, then will also respond with "
+        H.code "200"
+        " and the game's representation."
+      H.p $ do
+        "Will fail with a "
+        H.code "400"
+        " if the game has already started, or already finished."
+      H.p "e.g"
+      H.pre $ H.text "{\"message\":\"Game already started\"}"
+
+
+jsonExample :: ToJSON a => a -> H.Html
+jsonExample = H.pre . H.text . decodeUtf8 . toStrict . encode
 
 
 users :: (Functor f, Foldable f, MonadIO m) => f (UserID, Text) -> View m

@@ -173,7 +173,7 @@ hazardWeb' hazard pwgen deckGen = do
   get Route.game $ \gameId -> do
     game <- liftIO $ atomically $ getGameSlot hazard gameId
     case game of
-     Just game' -> json game'
+     Just game' -> View.game gameId game'
      Nothing -> View.errorMessage notFound404 ("no such game" :: Text)
 
   post Route.game $ \gameId -> withAuth (users hazard) $ \joiner -> do
