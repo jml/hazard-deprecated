@@ -26,6 +26,7 @@ module Hazard.Users ( UserDB
                     , makeUserDB
                     , makePassword
                     , getAllUsers
+                    , toJSONKey
                     ) where
 
 import BasicPrelude
@@ -62,6 +63,10 @@ instance ToJSON UserID where
 instance FromJSON UserID where
   parseJSON (String userId) = UserID <$> (readZ . textToString $ userId)
   parseJSON _ = mzero
+
+
+toJSONKey :: UserID -> Text
+toJSONKey (UserID i) = show i
 
 
 instance Arbitrary UserID where

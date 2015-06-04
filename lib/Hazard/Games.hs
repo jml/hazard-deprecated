@@ -60,7 +60,7 @@ import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 
-import Hazard.Users (UserID)
+import Hazard.Users (UserID, toJSONKey)
 
 import Haverer (
   Card(..),
@@ -93,10 +93,12 @@ data GameError a = GameNotFound Int
 
 data JoinError = AlreadyStarted
                | InvalidPlayers (P.Error UserID)
+               | AlreadyFinished
                deriving (Eq, Show)
 
 data PlayError = NotStarted
                | PlayNotSpecified
+               | RoundFinished
                | BadAction (Round.BadAction UserID)
                | NotYourTurn UserID UserID
                | NotInGame UserID
@@ -179,6 +181,7 @@ data Game = Pending { _numPlayers :: Int
           | InProgress { game :: H.Game UserID
                        , rounds :: [Round UserID]
                        }
+          | Finished { _outcome :: H.Outcome UserID }
           deriving (Show)
 
 
@@ -191,12 +194,12 @@ instance ToJSON GameSlot where
          Pending {} -> ["state" .= ("pending" :: Text)]
          Ready {} -> ["state" .= ("pending" :: Text)]
          InProgress {..} -> [ "state" .= ("in-progress" :: Text)
-                            , "scores" .= map snd (H.scores game)
                             ]
+         Finished {} -> [ "state" .= ("finished" :: Text) ]
       commonFields = [ "turnTimeout" .= turnTimeout slot
                      , "creator" .= creator slot
                      , "numPlayers" .= numPlayers slot
-                     , "players" .= players slot
+                     , "players" .= Map.mapKeys toJSONKey (getScores (gameState slot))
                      ]
 
 
@@ -306,23 +309,35 @@ numPlayers =
   where numPlayers' (Pending { _numPlayers = _numPlayers }) = _numPlayers
         numPlayers' (Ready { _playerSet = _playerSet }) = (length . toPlayers) _playerSet
         numPlayers' (InProgress { game = game' }) = (length . toPlayers . H.players) game'
+        numPlayers' (Finished { _outcome = outcome }) = (length . H.finalScores) outcome
 
 
 players :: GameSlot -> [UserID]
-players =
-  players' . gameState
-  where players' (Pending { _players = _players }) = _players
-        players' (Ready { _playerSet = _playerSet }) = toPlayers _playerSet
-        players' (InProgress { game = game }) = (toPlayers . H.players) game
+players = players' . gameState
+
+players' :: Game -> [UserID]
+players' (Pending { _players = _players }) = _players
+players' (Ready { _playerSet = _playerSet }) = toPlayers _playerSet
+players' (InProgress { game = game }) = (toPlayers . H.players) game
+players' (Finished { _outcome = outcome }) = map fst . H.finalScores $ outcome
 
 
 getRound :: Game -> Int -> Maybe (Round UserID)
 getRound InProgress { rounds = rounds } i = atMay rounds i
+-- XXX: Probably actually serve rounds for finished games
 getRound _ _ = Nothing
 
 
-type SlotActionT e m a = StateT GameSlot (EitherT (GameError e) m) a
+getScores :: Game -> Map UserID (Maybe Int)
+getScores game =
+  Map.fromList $ case game of
+   Pending {} -> zip (players' game) (repeat Nothing)
+   Ready {} -> zip (players' game) (repeat (Just 0))
+   InProgress { game = game' } -> map (second Just) (H.scores game')
+   Finished { _outcome = outcome } -> map (second Just) (H.finalScores outcome)
 
+
+type SlotActionT e m a = StateT GameSlot (EitherT (GameError e) m) a
 type SlotAction e a = SlotActionT e Identity a
 
 
@@ -362,13 +377,14 @@ joinSlot deck p = modifyGame $ \game ->
 joinGame :: UserID -> Game -> Either JoinError Game
 joinGame _ (InProgress {}) = throwError AlreadyStarted
 joinGame _ (Ready {}) = throwError AlreadyStarted
+joinGame _ (Finished {}) = throwError AlreadyFinished
 joinGame p g@(Pending {..})
   | p `elem` _players = return g
   | numNewPlayers == _numPlayers =
       Ready <$> fmapL InvalidPlayers (toPlayerSet newPlayers)
   | otherwise = return Pending { _numPlayers = _numPlayers
                                , _players = newPlayers }
-  where newPlayers = p:_players
+  where newPlayers = _players ++ [p]
         numNewPlayers = length newPlayers
 
 
@@ -395,6 +411,7 @@ playSlot deck playRequest = do
   case currentState of
    Pending {} -> throwOtherError NotStarted
    Ready {} -> throwOtherError NotStarted
+   Finished {} -> throwOtherError RoundFinished
    InProgress {} -> do
      let round = last . rounds $ currentState
      (result, round') <- playTurnOn round playRequest
@@ -404,7 +421,7 @@ playSlot deck playRequest = do
       Just victory -> do
         game' <- game . gameState <$> get
         case H.playersWon game' (Round.getWinners victory) of
-         Left _ -> error "jml is lazy"
+         Left outcome -> modify $ \s -> s { gameState = Finished outcome }
          Right game'' -> do
            modify $ \s -> s { gameState = (gameState s) { game = game'' } }
            modify $ \s -> s { gameState = addRound (H.newRound' (game . gameState $ s) deck) (gameState s) }

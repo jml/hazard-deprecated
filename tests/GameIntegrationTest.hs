@@ -35,6 +35,9 @@ import Test.Tasty.Hspec
 
 import Haverer.Deck (Card(..), Complete, Deck, makeDeck)
 
+import qualified Hazard.Routes as Route
+import Web.Spock.Safe (renderRoute)
+
 import Utils (get, getAs, hazardTestApp', post, postAs, requiresAuth, makeTestDeck)
 
 
@@ -56,18 +59,18 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
     it "POST creates game" $ do
       post "/users" [json|{username: "foo"}|]
       postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
-        [json|{"creator": "0", "state": "pending", "players": ["0"], "turnTimeout": 3600,
+        [json|{"creator": "0", "state": "pending", "players": {"0":null}, "turnTimeout": 3600,
               "numPlayers": 3}|]
         {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
 
     it "POST twice creates 2 game" $ do
       post "/users" [json|{username: "foo"}|]
       postAs "foo" "/games" [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
-        [json|{"creator": "0", "state": "pending", "players": ["0"], "turnTimeout": 3600,
+        [json|{"creator": "0", "state": "pending", "players": {"0": null}, "turnTimeout": 3600,
               "numPlayers": 3}|]
         {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
       postAs "foo" "/games" [json|{numPlayers: 2, turnTimeout: 3600}|] `shouldRespondWith`
-        [json|{"creator": "0", "state": "pending", "players": ["0"], "turnTimeout": 3600,
+        [json|{"creator": "0", "state": "pending", "players": {"0":null}, "turnTimeout": 3600,
               "numPlayers": 2}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/game/1"] }
 
     it "URLs from POSTs align properly" $ do
@@ -100,7 +103,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
     it "Created game has POST data" $ do
       game <- makeGameAs "foo" 3
       get game `shouldRespondWith` [json|{numPlayers: 3, turnTimeout: 3600, creator: "0",
-                                          state: "pending", players: ["0"]}|] {matchStatus = 200}
+                                          state: "pending", players: {"0":null}}|] {matchStatus = 200}
 
     it "POST without authorization fails" $ do
       game <- makeGameAs "foo" 3
@@ -110,7 +113,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
       game <- makeGameAs "foo" 3
       postAs "foo" game [json|null|] `shouldRespondWith`
         [json|{numPlayers: 3, turnTimeout: 3600, creator: "0",
-               state: "pending", players: ["0"]}|] {matchStatus = 200}
+               state: "pending", players: {"0": null}}|] {matchStatus = 200}
 
     it "POST joins game" $ do
       game <- makeGameAs "foo" 3
@@ -118,7 +121,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
       -- XXX: This tests the "order" that players appear in, when really I don't care.
       postAs "bar" game [json|null|] `shouldRespondWith`
         [json|{numPlayers: 3, turnTimeout: 3600, creator: "0",
-               state: "pending", players: ["1", "0"]}|] {matchStatus = 200}
+               state: "pending", players: {"1": null, "0": null}}|] {matchStatus = 200}
 
     it "POSTing to started game returns bad request" $ do
       game <- makeGameAs "foo" 2
@@ -136,8 +139,8 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
                turnTimeout: 3600,
                creator: "0",
                state: "in-progress",
-               players: ["1", "0"],
-               scores: [0, 0]}|] {matchStatus = 200}
+               players: {"1": 0, "0": 0}
+              }|] {matchStatus = 200}
 
     it "Same data on GET after POST" $ do
       game <- makeGameAs "foo" 2
@@ -148,8 +151,8 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
                turnTimeout: 3600,
                creator: "0",
                state: "in-progress",
-               players: ["1", "0"],
-               scores: [0, 0]}|] {matchStatus = 200}
+               players: {"1": 0, "0": 0}
+               }|] {matchStatus = 200}
 
 
   describe "Playing a game" $ do
@@ -168,15 +171,12 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
                                        turnTimeout: 3600,
                                        creator: "0",
                                        state: "in-progress",
-                                       players: ["2","1","0"],
-                                       scores: [0,0,0]
+                                       players: {"2": 0,"1": 0,"0": 0}
                                        }|] {matchStatus = 200}
 
     it "Rounds do exist for started games" $ do
-      -- XXX: This warning here means that we'e only ever dealing with the
-      -- integer player IDs, and never the user names. I don't know whether
-      -- that's a good thing or a bad thing, so I'm going to leave it as
-      -- integers until we start implementing actual clients.
+      -- TODO: Have a makeStartedGame helper that returns a Map of player IDs
+      -- to usernames as well as the ID of the current player
       let deck = fromJust $ makeDeck [Soldier,Soldier,Clown,Minister,Wizard,Wizard,Soldier,Knight,Knight,Priestess,Clown,Soldier,General,Soldier,Priestess,Prince]
       (game, [foo, bar, baz]) <- makeStartedGame' 3 deck
       get (game ++ "/round/0") `hasJsonResponse`
@@ -202,8 +202,8 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
                ]
              ],
           -- XXX: *Actually* the first player should be randomized. Currently
-          -- it's always the last person who signed up.
-          "currentPlayer" .= ("2" :: Text)
+          -- it's always the *first* person who signed up.
+          "currentPlayer" .= ("0" :: Text)
           ]
 
     it "Shows your hand when you GET" $ do
@@ -223,8 +223,8 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
       jsonResponseIs response (getKey "dealtCard") (Nothing :: Maybe Card)
 
     it "Does include dealt card when it is your turn" $ do
-      (game, [_, _, baz]) <- makeStartedGame 3
-      response <- getAs (encodeUtf8 baz) (game ++ "/round/0")
+      (game, [foo, _, _]) <- makeStartedGame 3
+      response <- getAs (encodeUtf8 foo) (game ++ "/round/0")
       jsonResponseIs response (isJust . getCard "dealtCard") True
 
     it "POST without authorization fails" $ do
@@ -232,10 +232,10 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
       post (game ++ "/round/0") [json|null|] `shouldRespondWith` requiresAuth
 
     it "POST when it's not your turn returns error" $ do
-      (game, [foo, _, _]) <- makeStartedGame 3
-      postAs (encodeUtf8 foo) (game ++ "/round/0") [json|{card: "priestess"}|]
+      (game, [_, bar, _]) <- makeStartedGame 3
+      postAs (encodeUtf8 bar) (game ++ "/round/0") [json|{card: "priestess"}|]
         `shouldRespondWith` [json|{message: "Not your turn",
-                                   currentPlayer: "2"}|] { matchStatus = 400 }
+                                   currentPlayer: "0"}|] { matchStatus = 400 }
 
     it "POST when you aren't in the game returns error" $ do
       (game, _) <- makeStartedGame 3
@@ -245,26 +245,26 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
 
     it "POST does *something*" $ do
       let deck = makeTestDeck "sscmwwskkpcsgspx"
-      (game, [_, _, baz]) <- makeStartedGame' 3 deck
+      (game, [foo, _, _]) <- makeStartedGame' 3 deck
       -- Hands are Soldier, Clown, Minister. Player is dealt Wizard.
 
       -- Play Wizard on self.
       let roundUrl = game ++ "/round/0"
-          user = encodeUtf8 baz
+          user = encodeUtf8 foo
       postAs user roundUrl [json|{card: "wizard", target: "2"}|]
-        `shouldRespondWith` [json|{id: "2", result: "forced-discard", card: "Wizard", target: "2"}|]
+        `shouldRespondWith` [json|{id: "0", result: "forced-discard", card: "Wizard", target: "2"}|]
 
     it "ending round reports winner correctly" $ do
       -- XXX: Deals cards, then burns, then draws. Really should be burn, deal draw.
       -- XXX: Players are 0, 1. Player 1 "goes" first, and is dealt the first
       -- card from the deck.
       let deck = makeTestDeck "skcmwwskspcsgspx"
-      (game, [_, bar]) <- makeStartedGame' 2 deck
+      (game, [foo, _]) <- makeStartedGame' 2 deck
       let roundUrl = game ++ "/round/0"
-          user = encodeUtf8 bar
-      postAs user roundUrl [json|{card: "soldier", target: "0", guess: "knight"}|]
+          user = encodeUtf8 foo
+      postAs user roundUrl [json|{card: "soldier", target: "1", guess: "knight"}|]
         `shouldRespondWith`
-        [json|{id: "1", result: "eliminated", card: "Soldier", guess: "Knight", target: "0", eliminated: "0"}|]
+        [json|{id: "0", result: "eliminated", card: "Soldier", guess: "Knight", target: "1", eliminated: "1"}|]
         { matchStatus = 200 }
       -- XXX: burnt card
       -- XXX: survivors
@@ -275,57 +275,72 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
       getAs user roundUrl `shouldRespondWith`
         [json|
          {currentPlayer: null,
-          winners: ["1"],
+          winners: ["0"],
           players: [
-            {protected:null,
-             active:false,
-             id:"0",
-             discards:["Knight"]
-            },
             {protected:false,
              active:true,
-             id:"1",
+             id:"0",
              hand:"Minister",
              discards:["Soldier"]
+            },
+            {protected:null,
+             active:false,
+             id:"1",
+             discards:["Knight"]
             }
             ]}|] { matchStatus = 200 }
 
     it "cannot POST to round after round is over" $ do
       let deck = makeTestDeck "skcmwwskspcsgspx"
-      (game, [_, bar]) <- makeStartedGame' 2 deck
+      (game, [foo, _]) <- makeStartedGame' 2 deck
       let roundUrl = game ++ "/round/0"
-          user = encodeUtf8 bar
-      postAs user roundUrl [json|{card: "soldier", target: "0", guess: "knight"}|]
-      postAs user roundUrl [json|{card: "soldier", target: "0", guess: "knight"}|]
+          user = encodeUtf8 foo
+      postAs user roundUrl [json|{card: "soldier", target: "1", guess: "knight"}|]
+      postAs user roundUrl [json|{card: "soldier", target: "1", guess: "knight"}|]
         `shouldRespondWith`
         [json|{message: "Round not active"}|] { matchStatus = 400 }
 
     it "updates game when round is over" $ do
       let deck = makeTestDeck "skcmwwskspcsgspx"
-      (game, [_, bar]) <- makeStartedGame' 2 deck
+      (game, [foo, _]) <- makeStartedGame' 2 deck
       let roundUrl = game ++ "/round/0"
-          user = encodeUtf8 bar
-      postAs user roundUrl [json|{card: "soldier", target: "0", guess: "knight"}|]
+          user = encodeUtf8 foo
+      postAs user roundUrl [json|{card: "soldier", target: "1", guess: "knight"}|]
       get game
       `shouldRespondWith`
-        -- XXX: This is confusing. players & scores should just be one dict.
-        [json|{"creator":"0","state":"in-progress","players":["1","0"],"scores":[0,1],"turnTimeout":3600,"numPlayers":2}|]
+        [json|{"creator":"0","state":"in-progress","players":{"1":0,"0":1},"turnTimeout":3600,"numPlayers":2}|]
         { matchStatus = 200 }
 
     it "creates new round after previous is over" $ do
       let deck = makeTestDeck "skcmwwskspcsgspx"
-      (game, [_, bar]) <- makeStartedGame' 2 deck
+      (game, [foo, _]) <- makeStartedGame' 2 deck
       let roundUrl = game ++ "/round/0"
-          user = encodeUtf8 bar
-      postAs user roundUrl [json|{card: "soldier", target: "0", guess: "knight"}|]
+          user = encodeUtf8 foo
+      postAs user roundUrl [json|{card: "soldier", target: "1", guess: "knight"}|]
       let roundUrl2 = game ++ "/round/1"
       -- XXX: Should just GET here, rather than POST
-      postAs user roundUrl2 [json|{card: "soldier", target: "0", guess: "knight"}|]
+      postAs user roundUrl2 [json|{card: "soldier", target: "1", guess: "knight"}|]
         `shouldRespondWith`
-        [json|{id: "1", result: "eliminated", card: "Soldier", guess: "Knight", target: "0", eliminated: "0"}|]
+        [json|{id: "0", result: "eliminated", card: "Soldier", guess: "Knight", target: "1", eliminated: "1"}|]
+        { matchStatus = 200 }
+
+    it "ends game when final score reached" $ do
+      let deck = makeTestDeck "skcmwwskspcsgspx"
+      (game, [foo, _]) <- makeStartedGame' 2 deck
+      let user = encodeUtf8 foo
+          roundUrl i = encodeUtf8 $ renderRoute Route.round 0 i
+      postAs user (roundUrl 0) [json|{card: "soldier", target: "1", guess: "knight"}|]
+      postAs user (roundUrl 1) [json|{card: "soldier", target: "1", guess: "knight"}|]
+      postAs user (roundUrl 2) [json|{card: "soldier", target: "1", guess: "knight"}|]
+      postAs user (roundUrl 3) [json|{card: "soldier", target: "1", guess: "knight"}|]
+      get game
+      `shouldRespondWith`
+        [json|{"creator":"0","state":"finished","players":{"1": 0,"0": 4},"turnTimeout":3600,"numPlayers":2}|]
         { matchStatus = 200 }
 
       -- TODO: Test that there's interesting history available at round/0
+      -- TODO: Test that we can't POST anything to finished games
+
 
   where
     makeGameAs :: Text -> Int -> WaiSession ByteString
