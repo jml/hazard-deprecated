@@ -414,7 +414,31 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
            "numPlayers" .= (2 :: Int)
            ])
 
-      -- TODO: Test that there's interesting history available at round/0
+    it "serves round information after game is finished" $ do
+      (_, [(foo, fooID), (_, barID)]) <- makeStartedGame' 2 easyToTerminateDeck
+      let user = encodeUtf8 foo
+          roundUrl i = encodeUtf8 $ renderRoute Route.round 0 i
+      postAs user (roundUrl 0) terminatingPlay
+      postAs user (roundUrl 1) terminatingPlay
+      postAs user (roundUrl 2) terminatingPlay
+      postAs user (roundUrl 3) terminatingPlay
+      get (roundUrl 3) `shouldRespondWith` fromValue (
+        object [ "currentPlayer" .= (Nothing :: Maybe Text)
+               , "winners" .= [fooID]
+               , "players" .= [
+                    object [ "protected" .= False
+                           , "active" .= True
+                           , "id" .= fooID
+                           , "discards" .= (["Soldier"] :: [Text])
+                           ]
+                    , object [ "protected" .= (Nothing :: Maybe Bool)
+                             , "active" .= False
+                             , "id" .= barID
+                             , "discards" .= (["Knight"] :: [Text])
+                             ]
+                    ]
+               ])
+
       -- TODO: Test that we can't POST anything to finished games
 
 

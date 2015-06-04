@@ -181,7 +181,9 @@ data Game = Pending { _numPlayers :: Int
           | InProgress { game :: H.Game UserID
                        , rounds :: [Round UserID]
                        }
-          | Finished { _outcome :: H.Outcome UserID }
+          | Finished { _outcome :: H.Outcome UserID
+                     , rounds :: [Round UserID]
+                     }
           deriving (Show)
 
 
@@ -326,6 +328,7 @@ players' (Finished { _outcome = outcome }) = map fst . H.finalScores $ outcome
 
 getRound :: Game -> Int -> Maybe (Round UserID)
 getRound InProgress { rounds = rounds } i = atMay rounds i
+getRound Finished { rounds = rounds } i = atMay rounds i
 -- TODO: Serve historic round information for finished games
 getRound _ _ = Nothing
 
@@ -423,7 +426,8 @@ playSlot deck playRequest = do
       Just victory -> do
         game' <- game . gameState <$> get
         case H.playersWon game' (Round.getWinners victory) of
-         Left outcome -> modify $ \s -> s { gameState = Finished outcome }
+         Left outcome ->
+           modify $ \s -> s { gameState = Finished outcome (rounds (gameState s)) }
          Right game'' -> do
            modify $ \s -> s { gameState = (gameState s) { game = game'' } }
            modify $ \s -> s { gameState = addRound (H.newRound' (game . gameState $ s) deck) (gameState s) }
