@@ -71,7 +71,7 @@ spec = with hazardTestApp $
 
     it "Can GET user after creating" $ do
       post "/users" [json|{username: "foo"}|]
-      getAs "foo" "/user/0" `shouldRespondWith` [json|{username: "foo"}|] {matchStatus = 200}
+      getAs "foo" "/user/0" `shouldRespondWith` [json|{username: "foo", id: "0"}|] {matchStatus = 200}
 
     it "Can't GET users who don't exist" $ do
       post "/users" [json|{username: "foo"}|]
@@ -81,5 +81,5 @@ spec = with hazardTestApp $
       post "/users" [json|{username: "foo"}|]
       post "/users" [json|{username: "bar"}|] `shouldRespondWith`
         [json|{password: "password", id: "1"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/1"]}
-      getAs "foo" "/user/0" `shouldRespondWith` [json|{username: "foo"}|] {matchStatus = 200}
-      getAs "foo" "/user/1" `shouldRespondWith` [json|{username: "bar"}|] {matchStatus = 200}
+      getAs "foo" "/user/0" `shouldRespondWith` [json|{username: "foo", id: "0"}|] {matchStatus = 200}
+      getAs "foo" "/user/1" `shouldRespondWith` [json|{username: "bar", id: "1"}|] {matchStatus = 200}

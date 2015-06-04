@@ -55,7 +55,9 @@ data User = User {
 
 
 instance ToJSON User where
-  toJSON (User _ u _) = object ["username" .= decodeUtf8 u]
+  toJSON user = object [ "username" .= decodeUtf8 (_username user)
+                       , "id" .= _userID user
+                       ]
 
 
 newtype UserID = UserID Int deriving (Eq, Ord, Show, PathPiece)
