@@ -41,7 +41,7 @@ import Hazard.HttpAuth (maybeLoggedIn)
 
 import Hazard.Model (
   Hazard,
-  addGame,
+  createGame,
   getGameSlot,
   getGames,
   getRound,
@@ -54,7 +54,6 @@ import Hazard.Model (
 import qualified Hazard.Views as View
 
 import Hazard.Games (
-  createGame,
   JoinError(..),
   GameError(..),
   PlayError(..),
@@ -165,8 +164,7 @@ hazardWeb' hazard pwgen deckGen = do
     case validateCreationRequest gameRequest of
      Left e -> View.badRequest (show e)
      Right r -> do
-       let newGame = createGame creator r
-       (gameId, game) <- liftIO $ atomically $ addGame hazard newGame
+       (gameId, game) <- liftIO $ atomically $ createGame hazard creator r
        setStatus created201
        setHeader "Location" (renderRoute Route.game gameId)
        json game
