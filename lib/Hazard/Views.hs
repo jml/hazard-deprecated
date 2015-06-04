@@ -50,6 +50,7 @@ import Web.Spock.Safe (
   setHeader
   )
 
+import Hazard.Users (UserID)
 import qualified Hazard.Routes as Route
 
 
@@ -149,11 +150,11 @@ games games' =
     gamesLinks = [renderRoute Route.game i | i <- [0..length games' - 1]]
 
 
-users :: (Foldable f, MonadIO m) => f Text -> View m
+users :: (Functor f, Foldable f, MonadIO m) => f (UserID, Text) -> View m
 users users' =
   dualResponse j h
   where
-    j = toList users'
+    j = toList (map snd users')
     h = H.docTypeHtml $ do
       H.head $ H.title "Hazard :: Users"
       H.body $ do
@@ -196,8 +197,7 @@ users users' =
           H.code "400"
           " and a JSON message saying so."
         H.h2 "All users"
-        H.ul $ forM_ userLinks linkToUser
-    userLinks = zip [(0 :: Int)..] (toList users')
+        H.ul $ forM_ users' linkToUser
     linkToUser (userId, username) = simpleLink (renderRoute Route.user userId) username
 
 
