@@ -171,6 +171,7 @@ instance FromJSON PlayRequest where
 --
 -- Pretty much all of the interesting state about the game is in 'Game'.
 data GameSlot = GameSlot {
+  gameID :: GameID,
   turnTimeout :: Seconds,
   creator :: UserID,
   gameState :: Game
@@ -301,13 +302,15 @@ instance FromJSON Card where
   parseJSON _ = mzero
 
 
-createGame :: UserID -> GameCreationRequest 'Valid -> GameSlot
-createGame userId request = GameSlot { turnTimeout = reqTurnTimeout request
-                                     , creator = userId
-                                     , gameState = Pending { _numPlayers = reqNumPlayers request
-                                                           , _players = [userId]
-                                                           }
-                                     }
+createGame :: UserID -> GameID -> GameCreationRequest 'Valid -> GameSlot
+createGame userId gameId request =
+  GameSlot { gameID = gameId
+           , turnTimeout = reqTurnTimeout request
+           , creator = userId
+           , gameState = Pending { _numPlayers = reqNumPlayers request
+                                 , _players = [userId]
+                                 }
+           }
 
 
 numPlayers :: GameSlot -> Int

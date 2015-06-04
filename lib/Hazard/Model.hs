@@ -88,10 +88,12 @@ createGame :: Hazard -> UserID -> GameCreationRequest 'Valid -> STM (GameID, Gam
 createGame hazard creator request = do
   let allGames = games hazard
   games' <- readTVar allGames
+  let gameID = length games'
+      game = makeGame gameID
   writeTVar allGames (V.snoc games' game)
-  return (length games', game)
+  return (gameID, game)
   where
-    game = Games.createGame creator request
+    makeGame gid = Games.createGame creator gid request
 
 
 type SlotResult e a = Either (GameError e) (a, GameSlot)
