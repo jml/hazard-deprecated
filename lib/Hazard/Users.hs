@@ -47,10 +47,17 @@ import Test.Tasty.QuickCheck (Arbitrary, arbitrary)
 
 -- TODO: Stored as username / password. Password is in the clear, which is
 -- terrible.  jml/hazard#4
-data User = User ByteString ByteString
+data User = User {
+  _userID :: UserID,
+  _username :: ByteString,
+  _password :: ByteString
+  }
+
 
 instance ToJSON User where
-  toJSON (User u _) = object ["username" .= decodeUtf8 u]
+  toJSON user = object [ "username" .= decodeUtf8 (_username user)
+                       , "id" .= _userID user
+                       ]
 
 
 newtype UserID = UserID Int deriving (Eq, Ord, Show, PathPiece)
@@ -93,8 +100,7 @@ makeUserDB = UserDB <$> newTVar empty
 getAllUsers :: UserDB -> STM [(UserID, ByteString)]
 getAllUsers db = do
   users <- readTVar (unUserDB db)
-  return [(UserID uid, getUsername user) | (uid, user) <- zip [0..] (V.toList users)]
-  where getUsername (User u _) = u
+  return [(_userID user, _username user) | user <- V.toList users]
 
 
 getUserByID :: UserDB -> UserID -> STM (Maybe User)
@@ -106,13 +112,11 @@ getUserByID userDB (UserID i) = do
 getUserByName :: UserDB -> ByteString -> STM (Maybe User)
 getUserByName userDB username = do
   allUsers <- readTVar (unUserDB userDB)
-  return $ find (\(User u _) -> u == username) allUsers
+  return $ find ((== username) . _username) allUsers
 
 
 getUserIDByName :: UserDB -> ByteString -> STM (Maybe UserID)
-getUserIDByName userDB username = do
-  allUsers <- readTVar (unUserDB userDB)
-  return $ UserID <$> V.findIndex (\(User u _) -> u == username) allUsers
+getUserIDByName userDB username = fmap _userID <$> getUserByName userDB username
 
 
 authenticate :: UserDB -> ByteString -> ByteString -> STM (Maybe User)
@@ -120,23 +124,25 @@ authenticate userDB username password = do
   foundUser <- getUserByName userDB username
   return $ case foundUser of
    Nothing -> Nothing
-   Just u@(User _ p)
-     | p == password -> Just u
+   Just user
+     | _password user == password -> Just user
      | otherwise -> Nothing
 
 
 addUser :: UserDB -> UserCreationRequest -> ByteString -> STM (Maybe UserID)
 addUser userDB req password =
   let username = encodeUtf8 (reqUsername req)
-      newUser = User username password
       users' = unUserDB userDB
   in do
-     allUsers <- readTVar users'
-     case V.find (\(User u _) -> u == username) allUsers of
-      Nothing  -> do
-        writeTVar users' (V.snoc allUsers newUser)
-        return $ Just $ UserID $ length allUsers
-      _ -> return Nothing
+    existing <- getUserByName userDB username
+    case existing of
+     Just _ -> return Nothing
+     Nothing  -> do
+       allUsers <- readTVar users'
+       let newID = UserID (length allUsers)
+       let newUser = User newID username password
+       writeTVar users' (V.snoc allUsers newUser)
+       return $ Just newID
 
 
 makePassword :: RandomGen g => Rand g ByteString

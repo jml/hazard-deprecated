@@ -37,12 +37,15 @@ spec = with hazardTestApp $
 
   describe "/users" $ do
 
+    -- These tests assume consecutive user IDs, even though we don't really
+    -- care *what* the ID is, so long as it's there, and that it's distinct.
+
     it "GET responds with 200 and an empty list" $
       get "/users" `shouldRespondWith` [json|[]|] {matchStatus = 200}
 
     it "POST of valid new user responds with 201 and password" $
       post "/users" [json|{username: "foo"}|] `shouldRespondWith`
-        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/0"]}
+        [json|{password: "password",id: "0"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/0"]}
 
     it "GET includes created users" $ do
       post "/users" [json|{username: "foo"}|]
@@ -50,9 +53,9 @@ spec = with hazardTestApp $
 
     it "POSTs of two new users responds with 201s and passwords" $ do
       post "/users" [json|{username: "foo"}|] `shouldRespondWith`
-        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/0"]}
+        [json|{password: "password",id: "0"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/0"]}
       post "/users" [json|{username: "bar"}|] `shouldRespondWith`
-        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/1"]}
+        [json|{password: "password",id: "1"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/1"]}
 
     it "POST will not create duplicate users" $ do
       post "/users" [json|{username: "foo"}|]
@@ -68,15 +71,15 @@ spec = with hazardTestApp $
 
     it "Can GET user after creating" $ do
       post "/users" [json|{username: "foo"}|]
-      getAs "foo" "/user/0" `shouldRespondWith` [json|{username: "foo"}|] {matchStatus = 200}
+      getAs "foo" "/user/0" `shouldRespondWith` [json|{username: "foo", id: "0"}|] {matchStatus = 200}
 
     it "Can't GET users who don't exist" $ do
       post "/users" [json|{username: "foo"}|]
       getAs "foo" "/user/1" `shouldRespondWith` [json|{message: "no such user"}|] {matchStatus = 404}
 
-    it "Creates users with sequential IDs" $ do
+    it "Creates users with differing IDs" $ do
       post "/users" [json|{username: "foo"}|]
       post "/users" [json|{username: "bar"}|] `shouldRespondWith`
-        [json|{password: "password"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/1"]}
-      getAs "foo" "/user/0" `shouldRespondWith` [json|{username: "foo"}|] {matchStatus = 200}
-      getAs "foo" "/user/1" `shouldRespondWith` [json|{username: "bar"}|] {matchStatus = 200}
+        [json|{password: "password", id: "1"}|] {matchStatus = 201, matchHeaders = ["Location" <:> "/user/1"]}
+      getAs "foo" "/user/0" `shouldRespondWith` [json|{username: "foo", id: "0"}|] {matchStatus = 200}
+      getAs "foo" "/user/1" `shouldRespondWith` [json|{username: "bar", id: "1"}|] {matchStatus = 200}
