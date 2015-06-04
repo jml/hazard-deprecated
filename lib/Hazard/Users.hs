@@ -47,7 +47,11 @@ import Test.Tasty.QuickCheck (Arbitrary, arbitrary)
 
 -- TODO: Stored as username / password. Password is in the clear, which is
 -- terrible.  jml/hazard#4
-data User = User UserID ByteString ByteString
+data User = User {
+  _userID :: UserID,
+  _username :: ByteString,
+  _password :: ByteString
+  }
 
 
 instance ToJSON User where
@@ -94,8 +98,7 @@ makeUserDB = UserDB <$> newTVar empty
 getAllUsers :: UserDB -> STM [(UserID, ByteString)]
 getAllUsers db = do
   users <- readTVar (unUserDB db)
-  return [(UserID uid, getUsername user) | (uid, user) <- zip [0..] (V.toList users)]
-  where getUsername (User _ u _) = u
+  return [(UserID uid, _username user) | (uid, user) <- zip [0..] (V.toList users)]
 
 
 getUserByID :: UserDB -> UserID -> STM (Maybe User)
@@ -107,13 +110,13 @@ getUserByID userDB (UserID i) = do
 getUserByName :: UserDB -> ByteString -> STM (Maybe User)
 getUserByName userDB username = do
   allUsers <- readTVar (unUserDB userDB)
-  return $ find (\(User _ u _) -> u == username) allUsers
+  return $ find ((== username) . _username) allUsers
 
 
 getUserIDByName :: UserDB -> ByteString -> STM (Maybe UserID)
 getUserIDByName userDB username = do
   allUsers <- readTVar (unUserDB userDB)
-  return $ UserID <$> V.findIndex (\(User _ u _) -> u == username) allUsers
+  return $ UserID <$> V.findIndex ((== username) . _username) allUsers
 
 
 authenticate :: UserDB -> ByteString -> ByteString -> STM (Maybe User)
@@ -121,8 +124,8 @@ authenticate userDB username password = do
   foundUser <- getUserByName userDB username
   return $ case foundUser of
    Nothing -> Nothing
-   Just u@(User _ _ p)
-     | p == password -> Just u
+   Just user
+     | _password user == password -> Just user
      | otherwise -> Nothing
 
 
@@ -132,9 +135,10 @@ addUser userDB req password =
       newUser = User (UserID 0) username password
       users' = unUserDB userDB
   in do
-     allUsers <- readTVar users'
-     case V.find (\(User _ u _) -> u == username) allUsers of
+    existing <- getUserByName userDB username
+    case existing of
       Nothing  -> do
+        allUsers <- readTVar users'
         writeTVar users' (V.snoc allUsers newUser)
         return $ Just $ UserID $ length allUsers
       _ -> return Nothing
