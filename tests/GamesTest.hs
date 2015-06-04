@@ -45,6 +45,7 @@ import Hazard.Games (GameCreationRequest(..),
                      runSlotAction,
                      turnTimeout,
                      validateCreationRequest)
+import Hazard.Users ()
 
 
 instance Arbitrary (GameCreationRequest 'Unchecked) where
@@ -59,7 +60,7 @@ instance Arbitrary (GameCreationRequest 'Valid) where
      Right r -> return r
 
 
-instance (Arbitrary a, Ord a, Show a) => Arbitrary (GameSlot a) where
+instance Arbitrary GameSlot where
 
   arbitrary = do
     game <- initialGame
@@ -80,11 +81,11 @@ instance Arbitrary Card where
                        ]
 
 
-initialGame :: Arbitrary a => Gen (GameSlot a)
+initialGame :: Gen GameSlot
 initialGame = createGame <$> arbitrary <*> arbitrary
 
 
-addPlayers :: (Arbitrary a, Ord a, Show a) => Int -> GameSlot a -> Gen (GameSlot a)
+addPlayers :: Int -> GameSlot -> Gen GameSlot
 addPlayers n g =
   iterate (>>= addPlayer) (return g) !! n
   where
@@ -94,11 +95,11 @@ addPlayers n g =
       return $ snd $ assertRight' (runSlotAction (joinSlot deck p) g')
 
 
-prop_creatorInPlayers :: Eq a => GameSlot a -> Bool
+prop_creatorInPlayers :: GameSlot -> Bool
 prop_creatorInPlayers g = creator g `elem` players g
 
 
-prop_numPlayersVsActualPlayers :: GameSlot a -> Bool
+prop_numPlayersVsActualPlayers :: GameSlot -> Bool
 prop_numPlayersVsActualPlayers g =
   case gameState g of
    Pending {} -> length (players g) < numPlayers g
@@ -117,19 +118,17 @@ suite :: TestTree
 suite = testGroup "Hazard.Games" [
   testGroup "createGame"
   [ testProperty "uses requested turnTimeout" $
-    \x y -> let g = createGame (x :: Int) y in turnTimeout g == reqTurnTimeout y
+    \x y -> let g = createGame x y in turnTimeout g == reqTurnTimeout y
   , testProperty "uses requested numPlayers" $
-    \x y -> let g = createGame (x :: Int) y in numPlayers g == reqNumPlayers y
+    \x y -> let g = createGame x y in numPlayers g == reqNumPlayers y
   , testProperty "records the creator" $
-    \x y -> let g = createGame (x :: Int) y in creator g == x
+    \x y -> let g = createGame x y in creator g == x
   , testProperty "leaves creator as the only initial player" $
-    \x y -> let g = createGame (x :: Int) y in players g == [x]
+    \x y -> let g = createGame x y in players g == [x]
   ],
   testGroup "GameSlot"
-  [ testProperty "creator in players" $
-    \x -> prop_creatorInPlayers (x :: GameSlot Int)
-  , testProperty "numPlayers greater than or equal to number of players" $
-    \x -> prop_numPlayersVsActualPlayers (x :: GameSlot Int)
+  [ testProperty "creator in players" prop_creatorInPlayers
+  , testProperty "numPlayers greater than or equal to number of players" prop_numPlayersVsActualPlayers
   ],
   testGroup "JSON parsing"
   [ testProperty "Card" $ \x -> prop_jsonEquivalent (x :: Card)

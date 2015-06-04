@@ -47,7 +47,7 @@ import Hazard.Games (
 import Hazard.Users (UserDB, UserID, makeUserDB)
 
 
-data Hazard = Hazard { games :: TVar (Vector (GameSlot UserID))
+data Hazard = Hazard { games :: TVar (Vector GameSlot)
                      , users :: UserDB
                      }
 
@@ -61,17 +61,17 @@ makeHazard :: STM Hazard
 makeHazard = Hazard <$> newTVar empty <*> makeUserDB
 
 
-getGames :: Hazard -> STM (Vector (GameSlot UserID))
+getGames :: Hazard -> STM (Vector GameSlot)
 getGames = readTVar . games
 
 
-getGameSlot :: Hazard -> GameID -> STM (Maybe (GameSlot UserID))
+getGameSlot :: Hazard -> GameID -> STM (Maybe GameSlot)
 getGameSlot hazard i = do
   games' <- readTVar (games hazard)
   return $ games' !? i
 
 
-tryGetSlot :: Hazard -> GameID -> EitherT (GameError e) STM (GameSlot UserID)
+tryGetSlot :: Hazard -> GameID -> EitherT (GameError e) STM GameSlot
 tryGetSlot hazard i = do
   games' <- lift $ readTVar (games hazard)
   (games' !? i) ?? GameNotFound i
@@ -82,7 +82,7 @@ getRound hazard i j =
   (fmap . (=<<)) (flip Games.getRound j . Games.gameState) (getGameSlot hazard i)
 
 
-addGame :: Hazard -> GameSlot UserID -> STM (Int, GameSlot UserID)
+addGame :: Hazard -> GameSlot -> STM (Int, GameSlot)
 addGame hazard game = do
   let allGames = games hazard
   games' <- readTVar allGames
@@ -90,10 +90,10 @@ addGame hazard game = do
   return (length games', game)
 
 
-type SlotResult e a = Either (GameError e) (a, GameSlot UserID)
+type SlotResult e a = Either (GameError e) (a, GameSlot)
 
 
-modifySlot :: Hazard -> GameID -> (GameSlot UserID -> SlotResult e a) -> STM (SlotResult e a)
+modifySlot :: Hazard -> GameID -> (GameSlot -> SlotResult e a) -> STM (SlotResult e a)
 modifySlot hazard i f = runEitherT $ do
   slot <- tryGetSlot hazard i
   (a, slot') <- hoistEither $ f slot
@@ -106,5 +106,5 @@ modifySlot hazard i f = runEitherT $ do
       \games' -> games' // [(i, game)]
 
 
-applySlotAction :: Hazard -> GameID -> SlotAction e UserID a -> STM (SlotResult e a)
+applySlotAction :: Hazard -> GameID -> SlotAction e a -> STM (SlotResult e a)
 applySlotAction hazard i action = modifySlot hazard i (runSlotAction action)

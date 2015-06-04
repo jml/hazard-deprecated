@@ -41,6 +41,7 @@ import System.Random (RandomGen)
 import Web.PathPieces (PathPiece)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object, String), object, (.:))
+import Test.Tasty.QuickCheck (Arbitrary, arbitrary)
 
 
 -- TODO: Stored as username / password. Password is in the clear, which is
@@ -61,6 +62,10 @@ instance ToJSON UserID where
 instance FromJSON UserID where
   parseJSON (String userId) = UserID <$> (readZ . textToString $ userId)
   parseJSON _ = mzero
+
+
+instance Arbitrary UserID where
+  arbitrary = UserID <$> arbitrary
 
 
 data UserCreationRequest = UserCreationRequest { reqUsername :: Text }
