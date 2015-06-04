@@ -98,7 +98,7 @@ makeUserDB = UserDB <$> newTVar empty
 getAllUsers :: UserDB -> STM [(UserID, ByteString)]
 getAllUsers db = do
   users <- readTVar (unUserDB db)
-  return [(UserID uid, _username user) | (uid, user) <- zip [0..] (V.toList users)]
+  return [(_userID user, _username user) | user <- V.toList users]
 
 
 getUserByID :: UserDB -> UserID -> STM (Maybe User)
@@ -114,9 +114,7 @@ getUserByName userDB username = do
 
 
 getUserIDByName :: UserDB -> ByteString -> STM (Maybe UserID)
-getUserIDByName userDB username = do
-  allUsers <- readTVar (unUserDB userDB)
-  return $ UserID <$> V.findIndex ((== username) . _username) allUsers
+getUserIDByName userDB username = fmap _userID <$> getUserByName userDB username
 
 
 authenticate :: UserDB -> ByteString -> ByteString -> STM (Maybe User)
