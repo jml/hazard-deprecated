@@ -118,7 +118,6 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
     it "POST joins game" $ do
       game <- makeGameAs "foo" 3
       post "/users" [json|{username: "bar"}|]
-      -- XXX: This tests the "order" that players appear in, when really I don't care.
       postAs "bar" game [json|null|] `shouldRespondWith`
         [json|{numPlayers: 3, turnTimeout: 3600, creator: "0",
                state: "pending", players: {"1": null, "0": null}}|] {matchStatus = 200}
@@ -201,8 +200,9 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
                "discards" .= ([] :: [Card])
                ]
              ],
-          -- XXX: *Actually* the first player should be randomized. Currently
-          -- it's always the *first* person who signed up.
+          -- TODO: Randomize the first player (and the player order).
+          -- Currently it's always the *first* person who signed up (i.e. the
+          -- creator) followed by other players in signup order.
           "currentPlayer" .= ("0" :: Text)
           ]
 
@@ -256,7 +256,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
 
     it "ending round reports winner correctly" $ do
       -- XXX: Deals cards, then burns, then draws. Really should be burn, deal draw.
-      -- XXX: Players are 0, 1. Player 1 "goes" first, and is dealt the first
+      -- XXX: Players are 0, 1. Player 0 "goes" first, and is dealt the first
       -- card from the deck.
       let deck = makeTestDeck "skcmwwskspcsgspx"
       (game, [foo, _]) <- makeStartedGame' 2 deck
@@ -266,8 +266,8 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
         `shouldRespondWith`
         [json|{id: "0", result: "eliminated", card: "Soldier", guess: "Knight", target: "1", eliminated: "1"}|]
         { matchStatus = 200 }
-      -- XXX: burnt card
-      -- XXX: survivors
+      -- TODO: Include burn card in serialization of finished round.
+      -- TODO: Include survivors in serialization of finished round.
 
       -- XXX: Maybe the testing strategy here should be to test various
       -- serializations of Round, and use the Haverer testing library to

@@ -324,7 +324,7 @@ players' (Finished { _outcome = outcome }) = map fst . H.finalScores $ outcome
 
 getRound :: Game -> Int -> Maybe (Round UserID)
 getRound InProgress { rounds = rounds } i = atMay rounds i
--- XXX: Probably actually serve rounds for finished games
+-- TODO: Serve historic round information for finished games
 getRound _ _ = Nothing
 
 
