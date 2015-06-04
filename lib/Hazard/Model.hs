@@ -40,6 +40,7 @@ import Haverer.Round (Round)
 
 import qualified Hazard.Games as Games
 import Hazard.Games (
+  GameID,
   GameCreationRequest(..),
   GameSlot,
   GameError(..),
@@ -54,8 +55,6 @@ data Hazard = Hazard { games :: TVar (Vector GameSlot)
                      , users :: UserDB
                      }
 
-
-type GameID = Int
 
 type RoundID = Int
 

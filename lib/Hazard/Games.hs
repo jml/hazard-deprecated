@@ -25,6 +25,7 @@ module Hazard.Games ( GameCreationError(..)
                     , GameCreationRequest(reqNumPlayers, reqTurnTimeout)
                     , Validated(..)
                     , GameError(..)
+                    , GameID
                     , GameSlot
                     , Game(Pending, InProgress)
                     , JoinError(..)
@@ -106,6 +107,8 @@ data PlayError = NotStarted
                | RoundNotActive
                deriving (Show)
 
+
+type GameID = Int
 
 type Seconds = Int
 
