@@ -195,7 +195,9 @@ instance ToJSON GameSlot where
          Ready {} -> ["state" .= ("pending" :: Text)]
          InProgress {..} -> [ "state" .= ("in-progress" :: Text)
                             ]
-         Finished {} -> [ "state" .= ("finished" :: Text) ]
+         Finished {..} -> [ "state" .= ("finished" :: Text)
+                          , "winners" .= H.winners _outcome
+                          ]
       commonFields = [ "turnTimeout" .= turnTimeout slot
                      , "creator" .= creator slot
                      , "numPlayers" .= numPlayers slot

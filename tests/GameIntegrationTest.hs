@@ -409,6 +409,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
              fooID .= (4 :: Int),
              barID .= (0 :: Int)
              ],
+           "winners" .= [fooID],
            "turnTimeout" .= (3600 :: Int),
            "numPlayers" .= (2 :: Int)
            ])
