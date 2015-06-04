@@ -182,7 +182,8 @@ hazardWeb' hazard pwgen deckGen = do
     case result of
      Left (GameNotFound _) -> View.errorMessage notFound404 ("no such game" :: Text)
      Left (OtherError AlreadyStarted) -> View.badRequest ("Game already started" :: Text)
-     Left e -> View.internalError e
+     Left (OtherError AlreadyFinished) -> View.badRequest ("Game already finished" :: Text)
+     Left (OtherError (InvalidPlayers e)) -> View.internalError e
      Right (_, game) -> json game
 
   get Route.round $ \gameId roundId -> do

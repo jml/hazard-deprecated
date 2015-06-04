@@ -301,9 +301,10 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
                                               , "target" .= bazID ])
 
     it "ending round reports winner correctly" $ do
-      -- XXX: Deals cards, then burns, then draws. Really should be burn, deal draw.
-      -- XXX: Players are 0, 1. Player 0 "goes" first, and is dealt the first
-      -- card from the deck.
+      -- XXX: Deals cards, then burns, then draws. Really should be burn, deal
+      -- draw.
+      -- XXX: Player foo goes first, and is dealt the first card from the
+      -- deck.
       (game, [(foo, fooID), (_, barID)]) <- makeStartedGame' 2 easyToTerminateDeck
       let roundUrl = game ++ "/round/0"
           user = encodeUtf8 foo
@@ -439,8 +440,15 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
                     ]
                ])
 
-      -- TODO: Test that we can't POST anything to finished games
-
+    it "cannot POST to finished games" $ do
+      (game, [(foo, _), _]) <- makeStartedGame' 2 easyToTerminateDeck
+      let user = encodeUtf8 foo
+          roundUrl i = encodeUtf8 $ renderRoute Route.round 0 i
+      postAs user (roundUrl 0) terminatingPlay
+      postAs user (roundUrl 1) terminatingPlay
+      postAs user (roundUrl 2) terminatingPlay
+      postAs user (roundUrl 3) terminatingPlay
+      postAs user game [json|null|] `shouldRespondWith` [json|{message: "Game already finished"}|] { matchStatus = 400 }
 
   where
     makeGameAs :: Text -> Int -> WaiSession ByteString
