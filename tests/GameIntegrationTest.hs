@@ -471,11 +471,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
     registerUser :: Text -> WaiSession Text
     registerUser username = do
       response <- post "/users" (encode $ object ["username" .= (username :: Text)])
-      return $ idFromLocation $ fromJust $ lookup "Location" (simpleHeaders response)
-      where
-        -- XXX: We should include the user ID in the response, making this URL
-        -- scraping obsolete.
-        idFromLocation path = Text.drop (Text.length "/user/") (decodeUtf8 path)
+      (return . fromJust) (getKey "id" =<< (decode . simpleBody) response)
 
 
     makeStartedGame :: Int -> WaiSession (ByteString, [(Text, Text)])
