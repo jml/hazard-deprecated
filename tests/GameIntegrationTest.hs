@@ -172,7 +172,8 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
            "players" .= object [
              fooID .= (0 :: Int),
              barID .= (0 :: Int)
-             ]
+             ],
+           "currentRound" .= ("/game/0/round/0" :: Text)
            ])
 
     it "Same data on GET after POST" $ do
@@ -189,7 +190,8 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
            "players" .= object [
              fooID .= (0 :: Int),
              barID .= (0 :: Int)
-             ]
+             ],
+           "currentRound" .= ("/game/0/round/0" :: Text)
            ])
 
   describe "Playing a game" $ do
@@ -213,7 +215,8 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
              fooID .= (0 :: Int),
              barID .= (0 :: Int),
              bazID .= (0 :: Int)
-             ]
+             ],
+           "currentRound" .= ("/game/0/round/0" :: Text)
            ])) {matchStatus = 200}
 
     it "Rounds do exist for started games" $ do
@@ -364,7 +367,8 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
             fooID .= (1 :: Int)
             ],
           "turnTimeout" .= (3600 :: Int),
-          "numPlayers" .= (2 :: Int)
+          "numPlayers" .= (2 :: Int),
+          "currentRound" .= ("/game/0/round/1" :: Text)
           ])
 
     it "creates new round after previous is over" $ do

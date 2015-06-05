@@ -83,7 +83,7 @@ instance Arbitrary Card where
 
 
 initialGame :: Gen GameSlot
-initialGame = createGame <$> arbitrary <*> arbitrary
+initialGame = createGame <$> arbitrary <*> arbitrary <*> arbitrary
 
 
 addPlayers :: Int -> GameSlot -> Gen GameSlot
@@ -119,13 +119,13 @@ suite :: TestTree
 suite = testGroup "Hazard.Games" [
   testGroup "createGame"
   [ testProperty "uses requested turnTimeout" $
-    \x y -> let g = createGame x y in turnTimeout g == reqTurnTimeout y
+    \x y z -> let g = createGame x y z in turnTimeout g == reqTurnTimeout z
   , testProperty "uses requested numPlayers" $
-    \x y -> let g = createGame x y in numPlayers g == reqNumPlayers y
+    \x y z -> let g = createGame x y z in numPlayers g == reqNumPlayers z
   , testProperty "records the creator" $
-    \x y -> let g = createGame x y in creator g == x
+    \x y z -> let g = createGame x y z in creator g == x
   , testProperty "leaves creator as the only initial player" $
-    \x y -> let g = createGame x y in players g == [x]
+    \x y z -> let g = createGame x y z in players g == [x]
   ],
   testGroup "GameSlot"
   [ testProperty "creator in players" prop_creatorInPlayers

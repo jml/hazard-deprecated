@@ -12,12 +12,13 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Hazard.Model (
   Hazard
-  , addGame
+  , createGame
   , getGameSlot
   , getGames
   , makeHazard
@@ -39,9 +40,13 @@ import Haverer.Round (Round)
 
 import qualified Hazard.Games as Games
 import Hazard.Games (
+  GameID,
+  GameCreationRequest(..),
   GameSlot,
   GameError(..),
+  Validated(..),
   SlotAction,
+  RoundID,
   runSlotAction
   )
 import Hazard.Users (UserDB, UserID, makeUserDB)
@@ -50,11 +55,6 @@ import Hazard.Users (UserDB, UserID, makeUserDB)
 data Hazard = Hazard { games :: TVar (Vector GameSlot)
                      , users :: UserDB
                      }
-
-
-type GameID = Int
-
-type RoundID = Int
 
 
 makeHazard :: STM Hazard
@@ -82,12 +82,16 @@ getRound hazard i j =
   (fmap . (=<<)) (flip Games.getRound j . Games.gameState) (getGameSlot hazard i)
 
 
-addGame :: Hazard -> GameSlot -> STM (Int, GameSlot)
-addGame hazard game = do
+createGame :: Hazard -> UserID -> GameCreationRequest 'Valid -> STM (GameID, GameSlot)
+createGame hazard creator request = do
   let allGames = games hazard
   games' <- readTVar allGames
+  let gameID = length games'
+      game = makeGame gameID
   writeTVar allGames (V.snoc games' game)
-  return (length games', game)
+  return (gameID, game)
+  where
+    makeGame gid = Games.createGame creator gid request
 
 
 type SlotResult e a = Either (GameError e) (a, GameSlot)

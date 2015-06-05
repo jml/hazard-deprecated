@@ -25,10 +25,12 @@ module Hazard.Games ( GameCreationError(..)
                     , GameCreationRequest(reqNumPlayers, reqTurnTimeout)
                     , Validated(..)
                     , GameError(..)
+                    , GameID
                     , GameSlot
                     , Game(Pending, InProgress)
                     , JoinError(..)
                     , PlayError(..)
+                    , RoundID
                     , Seconds
                     , SlotAction
                     , runSlotAction
@@ -37,6 +39,8 @@ module Hazard.Games ( GameCreationError(..)
                     , createGame
                     , currentPlayer
                     , gameState
+                    , getAllRounds
+                    , getCurrentRound
                     , getRound
                     , getPlayers
                     , joinSlot
@@ -59,7 +63,9 @@ import Control.Monad.State
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), (.:?), Value(..))
 import qualified Data.Map as Map
 import qualified Data.Text as Text
+import Web.Spock.Safe (renderRoute)
 
+import qualified Hazard.Routes as Route
 import Hazard.Users (UserID, toJSONKey)
 
 import Haverer (
@@ -106,6 +112,9 @@ data PlayError = NotStarted
                | RoundNotActive
                deriving (Show)
 
+
+type GameID = Int
+type RoundID = Int
 
 type Seconds = Int
 
@@ -168,6 +177,7 @@ instance FromJSON PlayRequest where
 --
 -- Pretty much all of the interesting state about the game is in 'Game'.
 data GameSlot = GameSlot {
+  gameID :: GameID,
   turnTimeout :: Seconds,
   creator :: UserID,
   gameState :: Game
@@ -196,6 +206,7 @@ instance ToJSON GameSlot where
          Pending {} -> ["state" .= ("pending" :: Text)]
          Ready {} -> ["state" .= ("pending" :: Text)]
          InProgress {..} -> [ "state" .= ("in-progress" :: Text)
+                            , "currentRound" .= renderRoute Route.round (gameID slot) (length rounds - 1)
                             ]
          Finished {..} -> [ "state" .= ("finished" :: Text)
                           , "winners" .= H.winners _outcome
@@ -298,13 +309,15 @@ instance FromJSON Card where
   parseJSON _ = mzero
 
 
-createGame :: UserID -> GameCreationRequest 'Valid -> GameSlot
-createGame userId request = GameSlot { turnTimeout = reqTurnTimeout request
-                                     , creator = userId
-                                     , gameState = Pending { _numPlayers = reqNumPlayers request
-                                                           , _players = [userId]
-                                                           }
-                                     }
+createGame :: UserID -> GameID -> GameCreationRequest 'Valid -> GameSlot
+createGame userId gameId request =
+  GameSlot { gameID = gameId
+           , turnTimeout = reqTurnTimeout request
+           , creator = userId
+           , gameState = Pending { _numPlayers = reqNumPlayers request
+                                 , _players = [userId]
+                                 }
+           }
 
 
 numPlayers :: GameSlot -> Int
@@ -330,6 +343,21 @@ getRound :: Game -> Int -> Maybe (Round UserID)
 getRound InProgress { rounds = rounds } i = atMay rounds i
 getRound Finished { rounds = rounds } i = atMay rounds i
 getRound _ _ = Nothing
+
+
+getAllRounds :: GameSlot -> [(RoundID, Round UserID)]
+getAllRounds slot =
+  case gameState slot of
+   InProgress { rounds = rounds } -> zip [0..] rounds
+   Finished { rounds = rounds } -> zip [0..] rounds
+   _ -> []
+
+
+getCurrentRound :: GameSlot -> Maybe (RoundID, Round UserID)
+getCurrentRound slot =
+  case gameState slot of
+   InProgress {} -> Just $ last (getAllRounds slot)
+   _ -> Nothing
 
 
 getScores :: Game -> Map UserID (Maybe Int)
