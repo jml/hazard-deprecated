@@ -59,7 +59,6 @@ import Hazard.Games (
   PlayError(..),
   joinSlot,
   playSlot,
-  roundToJSON,
   validateCreationRequest,
   validatePlayRequest
   )
@@ -190,7 +189,7 @@ hazardWeb' hazard pwgen deckGen = do
     round <- liftIO $ atomically $ getRound hazard gameId roundId
     case round of
      Nothing -> View.errorMessage notFound404 ("no such round" :: Text)
-     Just round' -> json (roundToJSON viewer round')
+     Just round' -> View.round viewer gameId roundId round'
 
   post Route.round $ \gameId roundId ->
     withAuth (users hazard) $ \poster -> do

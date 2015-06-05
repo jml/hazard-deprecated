@@ -23,6 +23,7 @@ module Hazard.Views (
   , games
   , game
   , users
+  , round
     -- | Errors
   , authenticationRequired
   , badRequest
@@ -30,7 +31,7 @@ module Hazard.Views (
   , internalError
   ) where
 
-import BasicPrelude
+import BasicPrelude hiding (round)
 
 import Data.Aeson (ToJSON, (.=), encode, object)
 import Data.ByteString.Lazy (toStrict)
@@ -52,8 +53,9 @@ import Web.Spock.Safe (
   setHeader
   )
 
+import Haverer (Round)
 import Hazard.Users (UserID)
-import Hazard.Games (GameSlot, getAllRounds, getCurrentRound)
+import Hazard.Games (GameSlot, getAllRounds, getCurrentRound, roundToJSON)
 import qualified Hazard.Routes as Route
 
 
@@ -197,6 +199,48 @@ game i g =
         then empty
         else do H.h2 "Rounds"
                 H.ul $ forM_ allRounds (H.li . selfLink . renderRoute Route.round i . fst)
+
+
+
+round :: MonadIO m => Maybe UserID -> Int -> Int -> Round UserID -> View m
+round viewer gameID roundID r =
+  dualResponse jsonRound $
+  H.docTypeHtml $ do
+    H.head $ H.title $ do
+      "Hazard :: Game "
+      H.text $ show gameID
+      " :: Round "
+      H.text $ show roundID
+    H.body $ do
+      H.h1 $ H.text $ renderRoute Route.round gameID roundID
+      H.p "Endpoint for a round of Hazard."
+      H.h2 "GET"
+      H.p $ do
+        "GET will retrieve current information about the round. If you are "
+        "logged in and one of the players, this information will include your "
+        "current hand. If it is currently your turn, you will also have a "
+        H.code "dealtCard"
+        " that shows what you have been dealt."
+      H.p $ do
+        "After the round is over, almost all of this information will continue "
+        "to be displayed, save that there will be no current player."
+      jsonExample jsonRound
+      H.h2 "POST"
+      H.p $ do
+        "POSTing to a round is how you play your turn. When it is your turn, "
+        "POST something like this:"
+      jsonExample $ object ["card" .= ("Soldier" :: Text)
+                           , "guess" .= ("Wizard" :: Text)
+                           , "target" .= ("1" :: Text)
+                           ]
+      H.p "Which will guess that player 1 has the Wizard."
+      H.p $ do
+        "If you have a hand that indicates you've 'busted out', then you must "
+        "POST a JSON "
+        H.code "null"
+        " in order for play to proceed."
+
+  where jsonRound = roundToJSON viewer r
 
 
 jsonExample :: ToJSON a => a -> H.Html
