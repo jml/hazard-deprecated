@@ -70,8 +70,7 @@ import Hazard.Users (UserID, toJSONKey)
 
 import Haverer (
   Card(..),
-  Complete,
-  Deck,
+  FullDeck,
   Event(..),
   Play(..),
   Player,
@@ -397,7 +396,7 @@ modifyGame f = do
   put (slot { gameState = game'' })
 
 
-joinSlot :: Deck Complete -> UserID -> SlotAction JoinError ()
+joinSlot :: FullDeck -> UserID -> SlotAction JoinError ()
 joinSlot deck p = modifyGame $ \game ->
   do
     game' <- (fmapLT OtherError . hoistEither . joinGame p) game
@@ -420,7 +419,7 @@ joinGame p g@(Pending {..})
         numNewPlayers = length newPlayers
 
 
-makeGame :: Deck Complete -> P.PlayerSet UserID -> Game
+makeGame :: FullDeck -> P.PlayerSet UserID -> Game
 makeGame deck playerSet = do
   let game = H.makeGame playerSet
   let round = H.newRound' game deck
@@ -437,7 +436,7 @@ validatePlayRequest player roundId request = do
   return request
 
 
-playSlot :: Deck Complete -> Maybe PlayRequest -> SlotAction PlayError (Result UserID)
+playSlot :: FullDeck -> Maybe PlayRequest -> SlotAction PlayError (Result UserID)
 playSlot deck playRequest = do
   currentState <- gameState <$> get
   case currentState of

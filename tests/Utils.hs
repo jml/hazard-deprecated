@@ -44,7 +44,7 @@ import Haverer.Deck
 import Hazard (hazardWeb', makeHazard)
 
 
-testDeck :: Deck Complete
+testDeck :: FullDeck
 testDeck = fromJust $ makeDeck [
   Soldier
   , Soldier
@@ -66,7 +66,7 @@ testDeck = fromJust $ makeDeck [
 
 
 
-makeTestApp :: IO ByteString -> IO (Deck Complete) -> IO Application
+makeTestApp :: IO ByteString -> IO FullDeck -> IO Application
 makeTestApp passwords decks = do
   hazard <- atomically makeHazard
   spockAsApp $ spockT id $ hazardWeb' hazard passwords decks
@@ -75,7 +75,7 @@ makeTestApp passwords decks = do
 hazardTestApp :: IO Application
 hazardTestApp = makeTestApp  (return "password") (return testDeck)
 
-hazardTestApp' :: IORef (Deck Complete) -> IO Application
+hazardTestApp' :: IORef FullDeck -> IO Application
 hazardTestApp' decks = makeTestApp  (return "password") (readIORef decks)
 
 
@@ -105,7 +105,7 @@ requiresAuth = "Basic authentication is required" { matchStatus = 401
                                                   }
 
 
-makeTestDeck :: Text -> Deck Complete
+makeTestDeck :: Text -> FullDeck
 makeTestDeck =
   fromJust . makeDeck . map charToCard . textToString . Text.toLower
   where

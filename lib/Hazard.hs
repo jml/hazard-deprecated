@@ -36,7 +36,7 @@ import Network.Wai.Middleware.HttpAuth
 
 import Web.Spock.Safe
 
-import Haverer (Complete, Deck, newDeck)
+import Haverer (FullDeck, newDeck)
 import Hazard.HttpAuth (maybeLoggedIn)
 
 import Hazard.Model (
@@ -77,8 +77,6 @@ import Hazard.Users (
 
 expectJSON :: (MonadIO m, FromJSON a) => ActionT m a
 expectJSON = do
-  -- XXX: jsonBody appears to be using a parser that's really fussy about its
-  -- JSON: no whitespace, must quote object keys.
   body' <- jsonBody
   case body' of
    Nothing -> do
@@ -150,7 +148,7 @@ hazardWeb :: MonadIO m => Hazard -> SpockT m ()
 hazardWeb hazard = hazardWeb' hazard (evalRandIO makePassword) (evalRandIO newDeck)
 
 
-hazardWeb' :: MonadIO m => Hazard -> IO ByteString -> IO (Deck Complete) -> SpockT m ()
+hazardWeb' :: MonadIO m => Hazard -> IO ByteString -> IO FullDeck -> SpockT m ()
 hazardWeb' hazard pwgen deckGen = do
   get root View.home
 

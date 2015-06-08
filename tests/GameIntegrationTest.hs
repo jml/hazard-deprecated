@@ -34,7 +34,7 @@ import Test.Hspec.Wai.JSON
 import Test.Tasty
 import Test.Tasty.Hspec
 
-import Haverer.Deck (Card(..), Complete, Deck)
+import Haverer.Deck (Card(..), FullDeck)
 
 import qualified Hazard.Routes as Route
 import Web.Spock.Safe (renderRoute)
@@ -42,12 +42,12 @@ import Web.Spock.Safe (renderRoute)
 import Utils (get, getAs, hazardTestApp', post, postAs, requiresAuth, makeTestDeck)
 
 
-testDeck :: Deck Complete
+testDeck :: FullDeck
 testDeck = makeTestDeck "sscmwwskkpcsgspx"
 
 
 
-spec :: IORef (Deck Complete) -> Spec
+spec :: IORef FullDeck -> Spec
 spec deckVar = with (hazardTestApp' deckVar) $ do
   describe "GET /" $
     it "responds with 200" $
@@ -304,8 +304,6 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
                                               , "target" .= bazID ])
 
     it "ending round reports winner correctly" $ do
-      -- XXX: Deals cards, then burns, then draws. Really should be burn, deal
-      -- draw.
       -- XXX: Player foo goes first, and is dealt the first card from the
       -- deck.
       (game, [(foo, fooID), (_, barID)]) <- makeStartedGame' 2 easyToTerminateDeck
@@ -481,7 +479,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
     makeStartedGame :: Int -> WaiSession (ByteString, [(Text, Text)])
     makeStartedGame n = makeStartedGame' n testDeck
 
-    makeStartedGame' :: Int -> Deck Complete -> WaiSession (ByteString, [(Text, Text)])
+    makeStartedGame' :: Int -> FullDeck -> WaiSession (ByteString, [(Text, Text)])
     makeStartedGame' n deck =
       let userPool = ["foo", "bar", "baz", "qux"]
           users = take n userPool
@@ -502,8 +500,8 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
     getCard :: Text -> Value -> Maybe Card
     getCard = getKey
 
-    easyToTerminateDeck :: Deck Complete
-    easyToTerminateDeck = makeTestDeck "skcmwwskspcsgspx"
+    easyToTerminateDeck :: FullDeck
+    easyToTerminateDeck = makeTestDeck "cskmwwskspcsgspx"
 
     terminatingPlay = encode $ object [ "card" .= ("soldier" :: Text),
                                         -- XXX: Hard-coded user ID
