@@ -83,12 +83,13 @@ import Haverer (
   getPlayerMap,
   getHand,
   isProtected,
+  PlayerSet,
+  PlayerSetError,
   toPlayers,
   toPlayerSet,
   viewAction
   )
 import qualified Haverer.Game as H
-import qualified Haverer.Player as P
 import qualified Haverer.Round as Round
 
 
@@ -97,7 +98,7 @@ data GameError a = GameNotFound Int
                  deriving (Show)
 
 data JoinError = AlreadyStarted
-               | InvalidPlayers (P.Error UserID)
+               | InvalidPlayers (PlayerSetError UserID)
                | AlreadyFinished
                deriving (Eq, Show)
 
@@ -186,7 +187,7 @@ data GameSlot = GameSlot {
 data Game = Pending { _numPlayers :: Int
                     , _players :: [UserID]
                     }
-          | Ready { _playerSet :: P.PlayerSet UserID }
+          | Ready { _playerSet :: PlayerSet UserID }
           | InProgress { game :: H.Game UserID
                        , rounds :: [Round UserID]
                        }
@@ -419,7 +420,7 @@ joinGame p g@(Pending {..})
         numNewPlayers = length newPlayers
 
 
-makeGame :: FullDeck -> P.PlayerSet UserID -> Game
+makeGame :: FullDeck -> PlayerSet UserID -> Game
 makeGame deck playerSet = do
   let game = H.makeGame playerSet
   let round = H.newRound' game deck

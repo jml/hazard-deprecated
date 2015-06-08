@@ -28,7 +28,7 @@ cabal-version:       >=1.10
 
 source-repository head
   type: git
-  location: git@github.com:jml/haverer.git
+  location: git@github.com:jml/hazard.git
 
 library
   hs-source-dirs: lib
@@ -53,7 +53,7 @@ library
                , tasty-quickcheck >= 0.8 && <0.9
                , path-pieces
                , blaze-html
-               , haverer >= 0.2 && <0.3
+               , haverer >= 0.3 && <0.4
   exposed-modules: Hazard
                  , Hazard.HttpAuth
                  , Hazard.Games
@@ -102,5 +102,5 @@ test-suite test
                , basic-prelude >= 0.4.1 && < 0.5
                , errors >= 1.4.7 && < 1.5
                , unordered-containers >= 0.2.5 && < 0.3
-               , haverer >= 0.2 && <0.3
+               , haverer >= 0.3 && <0.4
                , hazard

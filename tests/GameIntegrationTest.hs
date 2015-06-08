@@ -309,7 +309,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
       (game, [(foo, fooID), (_, barID)]) <- makeStartedGame' 2 easyToTerminateDeck
       let roundUrl = game ++ "/round/0"
           user = encodeUtf8 foo
-      postAs user roundUrl terminatingPlay
+      postAs user roundUrl (terminatingPlay barID)
         `shouldRespondWith` (fromValue (
           object [ "id" .= fooID
                  , "result" .= ("eliminated" :: Text)
@@ -343,19 +343,18 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
                ])
 
     it "cannot POST to round after round is over" $ do
-      (game, [(foo, _), _]) <- makeStartedGame' 2 easyToTerminateDeck
+      (game, [(foo, _), (_, barID)]) <- makeStartedGame' 2 easyToTerminateDeck
       let roundUrl = game ++ "/round/0"
           user = encodeUtf8 foo
-      postAs user roundUrl terminatingPlay
-      postAs user roundUrl terminatingPlay
+      postAs user roundUrl (terminatingPlay barID)
+      postAs user roundUrl (terminatingPlay barID)
         `shouldRespondWith`
         [json|{message: "Round not active"}|] { matchStatus = 400 }
 
     it "updates game when round is over" $ do
       (game, [(foo, fooID), (_, barID)]) <- makeStartedGame' 2 easyToTerminateDeck
-      let roundUrl = game ++ "/round/0"
-          user = encodeUtf8 foo
-      postAs user roundUrl terminatingPlay
+      let user = encodeUtf8 foo
+      postAs user (roundUrl 0) (terminatingPlay barID)
       get game `shouldRespondWith` fromValue (
         object [
           "creator" .= fooID,
@@ -371,14 +370,13 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
 
     it "creates new round after previous is over" $ do
       (game, [(foo, fooID), (_, barID)]) <- makeStartedGame' 2 easyToTerminateDeck
-      let roundUrl = game ++ "/round/0"
-          user = encodeUtf8 foo
-      postAs user roundUrl terminatingPlay
+      let user = encodeUtf8 foo
+      postAs user (roundUrl 0) (terminatingPlay barID)
       let roundUrl2 = game ++ "/round/1"
       get roundUrl2
         `shouldRespondWith` fromValue (
           object [
-             "currentPlayer" .= fooID,
+             "currentPlayer" .= barID,
              "players" .= [
                object [
                  "protected" .= False,
@@ -397,20 +395,14 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
 
 
     it "ends game when final score reached" $ do
-      (game, [(foo, fooID), (_, barID)]) <- makeStartedGame' 2 easyToTerminateDeck
-      let user = encodeUtf8 foo
-          roundUrl i = encodeUtf8 $ renderRoute Route.round 0 i
-      postAs user (roundUrl 0) terminatingPlay
-      postAs user (roundUrl 1) terminatingPlay
-      postAs user (roundUrl 2) terminatingPlay
-      postAs user (roundUrl 3) terminatingPlay
+      (game, [(foo, fooID), (_, barID)]) <- makeFinishedGame
       get game `shouldRespondWith` fromValue (
         object [
            "creator" .= fooID,
            "state" .= ("finished" :: Text),
            "players" .= object [
              fooID .= (4 :: Int),
-             barID .= (0 :: Int)
+             barID .= (3 :: Int)
              ],
            "winners" .= [fooID],
            "turnTimeout" .= (3600 :: Int),
@@ -418,38 +410,27 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
            ])
 
     it "serves round information after game is finished" $ do
-      (_, [(foo, fooID), (_, barID)]) <- makeStartedGame' 2 easyToTerminateDeck
-      let user = encodeUtf8 foo
-          roundUrl i = encodeUtf8 $ renderRoute Route.round 0 i
-      postAs user (roundUrl 0) terminatingPlay
-      postAs user (roundUrl 1) terminatingPlay
-      postAs user (roundUrl 2) terminatingPlay
-      postAs user (roundUrl 3) terminatingPlay
+      (_, [(foo, fooID), (_, barID)]) <- makeFinishedGame
       get (roundUrl 3) `shouldRespondWith` fromValue (
         object [ "currentPlayer" .= (Nothing :: Maybe Text)
-               , "winners" .= [fooID]
+               , "winners" .= [barID]
                , "players" .= [
-                    object [ "protected" .= False
-                           , "active" .= True
+                    object [ "protected" .= (Nothing :: Maybe Bool)
+                           , "active" .= False
                            , "id" .= fooID
-                           , "discards" .= (["Soldier"] :: [Text])
+                           , "discards" .= (["Knight"] :: [Text])
                            ]
-                    , object [ "protected" .= (Nothing :: Maybe Bool)
-                             , "active" .= False
+                    , object [ "protected" .= False
+                             , "active" .= True
                              , "id" .= barID
-                             , "discards" .= (["Knight"] :: [Text])
+                             , "discards" .= (["Soldier"] :: [Text])
                              ]
                     ]
                ])
 
     it "cannot POST to finished games" $ do
-      (game, [(foo, _), _]) <- makeStartedGame' 2 easyToTerminateDeck
+      (game, [(foo, _), _]) <- makeFinishedGame
       let user = encodeUtf8 foo
-          roundUrl i = encodeUtf8 $ renderRoute Route.round 0 i
-      postAs user (roundUrl 0) terminatingPlay
-      postAs user (roundUrl 1) terminatingPlay
-      postAs user (roundUrl 2) terminatingPlay
-      postAs user (roundUrl 3) terminatingPlay
       postAs user game [json|null|] `shouldRespondWith` [json|{message: "Game already finished"}|] { matchStatus = 400 }
 
   where
@@ -503,10 +484,28 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
     easyToTerminateDeck :: FullDeck
     easyToTerminateDeck = makeTestDeck "cskmwwskspcsgspx"
 
-    terminatingPlay = encode $ object [ "card" .= ("soldier" :: Text),
-                                        -- XXX: Hard-coded user ID
-                                        "target" .= ("1" :: Text),
-                                        "guess" .= ("knight" :: Text) ]
+    terminatingPlay target = encode $ object [ "card" .= ("soldier" :: Text),
+                                               "target" .= (target :: Text),
+                                               "guess" .= ("knight" :: Text) ]
+
+    makeFinishedGame = do
+      (game, users) <- makeStartedGame' 2 easyToTerminateDeck
+      let [(foo, fooID), (bar, barID)] = users
+          fooUser = encodeUtf8 foo
+          barUser = encodeUtf8 bar
+      postAs fooUser (roundUrl 0) (terminatingPlay barID)
+      postAs barUser (roundUrl 1) (terminatingPlay fooID)
+      postAs fooUser (roundUrl 2) (terminatingPlay barID)
+      postAs barUser (roundUrl 3) (terminatingPlay fooID)
+      postAs fooUser (roundUrl 4) (terminatingPlay barID)
+      postAs barUser (roundUrl 5) (terminatingPlay fooID)
+      postAs fooUser (roundUrl 6) (terminatingPlay barID)
+      postAs barUser (roundUrl 7) (terminatingPlay fooID)
+      postAs fooUser (roundUrl 8) (terminatingPlay barID)
+      return (game, users)
+
+
+    roundUrl i = encodeUtf8 $ renderRoute Route.round 0 i
 
     getJsonResponse :: FromJSON a => SResponse -> WaiSession a
     getJsonResponse response = do
