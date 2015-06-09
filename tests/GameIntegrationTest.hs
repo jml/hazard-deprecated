@@ -51,6 +51,8 @@ roundUrl i = encodeUtf8 $ renderRoute Route.round 0 i
 
 gamesR = encodeUtf8 $ renderRoute Route.games
 
+gameR i = encodeUtf8 $ renderRoute Route.game i
+
 
 spec :: IORef FullDeck -> Spec
 spec deckVar = with (hazardTestApp' deckVar) $ do
@@ -72,14 +74,14 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
                  , "turnTimeout" .= (3600 :: Int)
                  , "numPlayers" .= (3 :: Int)
                  ]))
-        {matchStatus = 201, matchHeaders = ["Location" <:> "/game/0"] }
+        {matchStatus = 201, matchHeaders = ["Location" <:> gameR 0] }
 
     it "POST twice creates 2 game" $ do
       _ <- registerUser "foo"
       postAs "foo" gamesR [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
-        201 { matchHeaders = ["Location" <:> "/game/0"] }
+        201 { matchHeaders = ["Location" <:> gameR 0] }
       postAs "foo" gamesR [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith`
-        201 { matchHeaders = ["Location" <:> "/game/1"] }
+        201 { matchHeaders = ["Location" <:> gameR 1] }
 
     it "URLs from POSTs align properly" $ do
       -- Post a 2 player game and 3 player game, and make sure that when we
@@ -87,9 +89,9 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
       post "/users" [json|{username: "foo"}|]
       postAs "foo" gamesR [json|{numPlayers: 3, turnTimeout: 3600}|]
       postAs "foo" gamesR [json|{numPlayers: 2, turnTimeout: 3600}|]
-      game0 <- get "/game/0"
+      game0 <- get (gameR 0)
       jsonResponseIs game0 (getKey "numPlayers") (Just 3 :: Maybe Int)
-      game1 <- get "/game/1"
+      game1 <- get (gameR 1)
       jsonResponseIs game1 (getKey "numPlayers") (Just 2 :: Maybe Int)
 
     it "unauthenticated POST fails" $
@@ -98,15 +100,15 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
     it "Created game appears in list" $ do
       post "/users" [json|{username: "foo"}|]
       postAs "foo" gamesR [json|{numPlayers: 3, turnTimeout: 3600}|]
-      get gamesR `shouldRespondWith` [json|["/game/0"]|]
+      get gamesR `shouldRespondWith` fromValue (toJSON [renderRoute Route.game 0])
 
   describe "/game/N" $ do
     it "GET returns 404 if it hasn't been created" $
-      get "/game/0" `shouldRespondWith` 404
+      get (gameR 0) `shouldRespondWith` 404
 
     it "POST returns 404 if it hasn't been created" $ do
       post "/users" [json|{username: "foo"}|]
-      postAs "foo" "/game/0" [json|null|] `shouldRespondWith` 404
+      postAs "foo" (gameR 0) [json|null|] `shouldRespondWith` 404
 
     it "Created game has POST data" $ do
       fooID <- registerUser "foo"
