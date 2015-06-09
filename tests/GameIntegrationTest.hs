@@ -49,6 +49,8 @@ testDeck = makeTestDeck "sscmwwskkpcsgspx"
 
 roundUrl i = encodeUtf8 $ renderRoute Route.round 0 i
 
+usersR = encodeUtf8 $ renderRoute Route.users
+
 gamesR = encodeUtf8 $ renderRoute Route.games
 
 gameR i = encodeUtf8 $ renderRoute Route.game i
@@ -86,7 +88,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
     it "URLs from POSTs align properly" $ do
       -- Post a 2 player game and 3 player game, and make sure that when we
       -- GET the URLs that number of players is as we requested.
-      post "/users" [json|{username: "foo"}|]
+      _ <- registerUser "foo"
       postAs "foo" gamesR [json|{numPlayers: 3, turnTimeout: 3600}|]
       postAs "foo" gamesR [json|{numPlayers: 2, turnTimeout: 3600}|]
       game0 <- get (gameR 0)
@@ -98,7 +100,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
       post gamesR [json|{numPlayers: 3, turnTimeout: 3600}|] `shouldRespondWith` requiresAuth
 
     it "Created game appears in list" $ do
-      post "/users" [json|{username: "foo"}|]
+      _ <- registerUser "foo"
       postAs "foo" gamesR [json|{numPlayers: 3, turnTimeout: 3600}|]
       get gamesR `shouldRespondWith` fromValue (toJSON [renderRoute Route.game 0])
 
@@ -107,7 +109,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
       get (gameR 0) `shouldRespondWith` 404
 
     it "POST returns 404 if it hasn't been created" $ do
-      post "/users" [json|{username: "foo"}|]
+      _ <- registerUser "foo"
       postAs "foo" (gameR 0) [json|null|] `shouldRespondWith` 404
 
     it "Created game has POST data" $ do
@@ -162,8 +164,8 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
       game <- makeGameAs "foo" 2
       registerUser "bar"
       postAs "bar" game [json|null|]
-      post "/users" [json|{username: "qux"}|]
-      postAs "bar" game [json|null|] `shouldRespondWith`
+      _ <- registerUser "qux"
+      postAs "qux" game [json|null|] `shouldRespondWith`
         [json|{message: "Game already started"}|] {matchStatus = 400}
 
     it "Game starts when enough people have joined" $ do
@@ -291,7 +293,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
 
     it "POST when you aren't in the game returns error" $ do
       (game, _) <- makeStartedGame 3
-      post "/users" [json|{username: "qux"}|]
+      _ <- registerUser "qux"
       postAs "qux" (game ++ "/round/0") [json|{card: "priestess"}|]
         `shouldRespondWith` [json|{message: "You are not playing"}|] { matchStatus = 400 }
 
@@ -460,7 +462,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
     -- | Register a user and return the ID.
     registerUser :: Text -> WaiSession Text
     registerUser username = do
-      response <- post "/users" (encode $ object ["username" .= (username :: Text)])
+      response <- post usersR (encode $ object ["username" .= (username :: Text)])
       (return . fromJust) (getKey "id" =<< (decode . simpleBody) response)
 
 
