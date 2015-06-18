@@ -49,6 +49,8 @@ testDeck = makeTestDeck "sscmwwskkpcsgspx"
 
 roundUrl i = encodeUtf8 $ renderRoute Route.round 0 i
 
+roundWithinGame game i = encodeUtf8 $ decodeUtf8 game ++ "/round/" ++ show i
+
 usersR = encodeUtf8 $ renderRoute Route.users
 
 gamesR = encodeUtf8 $ renderRoute Route.games
@@ -182,7 +184,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
              fooID .= (0 :: Int),
              barID .= (0 :: Int)
              ],
-           "currentRound" .= ("/game/0/round/0" :: Text)
+           "currentRound" .= renderRoute Route.round 0 0
            ])
 
     it "Same data on GET after POST" $ do
@@ -200,17 +202,17 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
              fooID .= (0 :: Int),
              barID .= (0 :: Int)
              ],
-           "currentRound" .= ("/game/0/round/0" :: Text)
+           "currentRound" .= renderRoute Route.round 0 0
            ])
 
   describe "Playing a game" $ do
     it "Rounds don't exist for unstarted game (GET)" $ do
       game <- makeGameAs "foo" 2
-      get (game ++ "/round/0") `shouldRespondWith` 404
+      get (roundWithinGame game 0) `shouldRespondWith` 404
 
     it "Rounds don't exist for unstarted game (POST)" $ do
       game <- makeGameAs "foo" 2
-      postAs "foo" (game ++ "/round/0") [json|{card: "priestess"}|] `shouldRespondWith` 404
+      postAs "foo" (roundWithinGame game 0) [json|{card: "priestess"}|] `shouldRespondWith` 404
 
     it "started game is started" $ do
       (game, [(_, fooID), (_, barID), (_, bazID)]) <- makeStartedGame 3
@@ -225,13 +227,13 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
              barID .= (0 :: Int),
              bazID .= (0 :: Int)
              ],
-           "currentRound" .= ("/game/0/round/0" :: Text)
+           "currentRound" .= renderRoute Route.round 0 0
            ])) {matchStatus = 200}
 
     it "Rounds do exist for started games" $ do
       let deck = makeTestDeck "sscmwwskkpcsgspx"
       (game, [(_, fooID), (_, barID), (_, bazID)]) <- makeStartedGame' 3 deck
-      get (game ++ "/round/0") `hasJsonResponse`
+      get (roundWithinGame game 0) `hasJsonResponse`
         object [
           "players" .= [
              object [
@@ -261,32 +263,32 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
 
     it "Shows your hand when you GET" $ do
       (game, [_, (bar, _), _]) <- makeStartedGame 3
-      response <- getAs (encodeUtf8 bar) (game ++ "/round/0")
+      response <- getAs (encodeUtf8 bar) (roundWithinGame game 0)
       jsonResponseIs response (isJust . (getPlayer 1 >=> getCard "hand")) True
 
     it "Doesn't show other hands when you GET" $ do
       (game, [_, (bar, _), _]) <- makeStartedGame 3
-      response <- getAs (encodeUtf8 bar) (game ++ "/round/0")
+      response <- getAs (encodeUtf8 bar) (roundWithinGame game 0)
       jsonResponseIs response (getPlayer 0 >=> getKey "hand") (Nothing :: Maybe Card)
       jsonResponseIs response (getPlayer 2 >=> getKey "hand") (Nothing :: Maybe Card)
 
     it "Doesn't include dealt card when it's not your turn" $ do
       (game, [_, (bar, _), _]) <- makeStartedGame 3
-      response <- getAs (encodeUtf8 bar) (game ++ "/round/0")
+      response <- getAs (encodeUtf8 bar) (roundWithinGame game 0)
       jsonResponseIs response (getKey "dealtCard") (Nothing :: Maybe Card)
 
     it "Does include dealt card when it is your turn" $ do
       (game, [(foo, _), _, _]) <- makeStartedGame 3
-      response <- getAs (encodeUtf8 foo) (game ++ "/round/0")
+      response <- getAs (encodeUtf8 foo) (roundWithinGame game 0)
       jsonResponseIs response (isJust . getCard "dealtCard") True
 
     it "POST without authorization fails" $ do
       (game, _) <- makeStartedGame 3
-      post (game ++ "/round/0") [json|null|] `shouldRespondWith` requiresAuth
+      post (roundWithinGame game 0) [json|null|] `shouldRespondWith` requiresAuth
 
     it "POST when it's not your turn returns error" $ do
       (game, [(_, fooID), (bar, _), _]) <- makeStartedGame 3
-      postAs (encodeUtf8 bar) (game ++ "/round/0") [json|{card: "priestess"}|]
+      postAs (encodeUtf8 bar) (roundWithinGame game 0) [json|{card: "priestess"}|]
         `shouldRespondWith`
           (fromValue (object [ "message" .= ("Not your turn" :: Text)
                              , "currentPlayer" .= fooID ])) { matchStatus = 400 }
@@ -294,7 +296,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
     it "POST when you aren't in the game returns error" $ do
       (game, _) <- makeStartedGame 3
       _ <- registerUser "qux"
-      postAs "qux" (game ++ "/round/0") [json|{card: "priestess"}|]
+      postAs "qux" (roundWithinGame game 0) [json|{card: "priestess"}|]
         `shouldRespondWith` [json|{message: "You are not playing"}|] { matchStatus = 400 }
 
     it "POST does *something*" $ do
@@ -303,7 +305,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
       -- Hands are Soldier, Clown, Minister. Player is dealt Wizard.
 
       -- Play Wizard on baz.
-      let roundUrl = game ++ "/round/0"
+      let roundUrl = roundWithinGame game 0
           user = encodeUtf8 foo
       postAs user roundUrl (fromValue $ object [ "card" .= ("wizard" :: Text)
                                                , "target" .= bazID ])
@@ -316,7 +318,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
       -- XXX: Player foo goes first, and is dealt the first card from the
       -- deck.
       (game, [(foo, fooID), (_, barID)]) <- makeStartedGame' 2 easyToTerminateDeck
-      let roundUrl = game ++ "/round/0"
+      let roundUrl = roundWithinGame game 0
           user = encodeUtf8 foo
       postAs user roundUrl (terminatingPlay barID)
         `shouldRespondWith` (fromValue (
@@ -353,7 +355,7 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
 
     it "cannot POST to round after round is over" $ do
       (game, [(foo, _), (_, barID)]) <- makeStartedGame' 2 easyToTerminateDeck
-      let roundUrl = game ++ "/round/0"
+      let roundUrl = roundWithinGame game 0
           user = encodeUtf8 foo
       postAs user roundUrl (terminatingPlay barID)
       postAs user roundUrl (terminatingPlay barID)
@@ -374,14 +376,14 @@ spec deckVar = with (hazardTestApp' deckVar) $ do
             ],
           "turnTimeout" .= (3600 :: Int),
           "numPlayers" .= (2 :: Int),
-          "currentRound" .= ("/game/0/round/1" :: Text)
+          "currentRound" .= renderRoute Route.round 0 1
           ])
 
     it "creates new round after previous is over" $ do
       (game, [(foo, fooID), (_, barID)]) <- makeStartedGame' 2 easyToTerminateDeck
       let user = encodeUtf8 foo
       postAs user (roundUrl 0) (terminatingPlay barID)
-      let roundUrl2 = game ++ "/round/1"
+      let roundUrl2 = roundWithinGame game 1
       get roundUrl2
         `shouldRespondWith` fromValue (
           object [
