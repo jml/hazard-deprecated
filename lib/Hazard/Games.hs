@@ -155,10 +155,10 @@ validateCreationRequest (GameCreationRequest { .. })
   | otherwise = return $ GameCreationRequest reqNumPlayers reqTurnTimeout
 
 
-data PlayRequest = PlayRequest Card (Play UserID) deriving (Eq, Show)
+data PlayRequest (a :: Validated) = PlayRequest Card (Play UserID) deriving (Eq, Show)
 
 
-instance FromJSON PlayRequest where
+instance FromJSON (PlayRequest 'Unchecked) where
   parseJSON (Object v) = do
     -- XXX: Find out how to do this all in one line into a tuple using
     -- applicative functor
@@ -171,6 +171,19 @@ instance FromJSON PlayRequest where
      (Just player, Just guess') -> return $ Guess player guess'
      _ -> mzero
   parseJSON _ = mzero
+
+
+validatePlayRequest :: UserID -> Int -> Maybe (PlayRequest 'Unchecked) -> SlotAction PlayError (Maybe (PlayRequest 'Valid))
+validatePlayRequest player roundId request = do
+  game <- gameState <$> get
+  round <- liftEither $ getRound game roundId ?? RoundNotFound roundId
+  unless (player `elem` getPlayers round) (throwOtherError (NotInGame player))
+  current <- liftEither $ currentPlayer round ?? RoundNotActive
+  unless (player == current) (throwOtherError (NotYourTurn player current))
+  (return . fmap validCopy) request
+  where validCopy (PlayRequest card play) = PlayRequest card play
+
+
 
 
 -- | Represents a single game.
@@ -427,17 +440,7 @@ makeGame deck playerSet = do
   InProgress { game = game, rounds = pure round }
 
 
-validatePlayRequest :: UserID -> Int -> Maybe PlayRequest -> SlotAction PlayError (Maybe PlayRequest)
-validatePlayRequest player roundId request = do
-  game <- gameState <$> get
-  round <- liftEither $ getRound game roundId ?? RoundNotFound roundId
-  unless (player `elem` getPlayers round) (throwOtherError (NotInGame player))
-  current <- liftEither $ currentPlayer round ?? RoundNotActive
-  unless (player == current) (throwOtherError (NotYourTurn player current))
-  return request
-
-
-playSlot :: FullDeck -> Maybe PlayRequest -> SlotAction PlayError (Result UserID)
+playSlot :: FullDeck -> Maybe (PlayRequest 'Valid) -> SlotAction PlayError (Result UserID)
 playSlot deck playRequest = do
   currentState <- gameState <$> get
   case currentState of
