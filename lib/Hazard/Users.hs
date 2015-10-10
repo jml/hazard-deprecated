@@ -36,11 +36,10 @@ import BasicPrelude
 import Control.Concurrent.STM (TVar, newTVar, readTVar, writeTVar)
 import Control.Error hiding ((!?))
 import Control.Monad.STM (STM)
-import Control.Monad.Random (Rand, uniform)
+import Control.Monad.Random (uniform, MonadRandom)
 import qualified Data.ByteString as B
 import Data.Vector ((!?))
 import qualified Data.Vector as V
-import System.Random (RandomGen)
 import Web.PathPieces (PathPiece)
 
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object, String), object, (.:))
@@ -147,7 +146,7 @@ addUser userDB req password =
        return $ Just newID
 
 
-makePassword :: RandomGen g => Rand g ByteString
+makePassword :: MonadRandom m => m ByteString
 makePassword = B.pack <$> replicateM passwordLength randomPasswordChar
   where passwordLength = 16
         randomPasswordChar = uniform passwordChars
