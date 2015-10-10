@@ -55,11 +55,15 @@ library
                , blaze-html
                , haverer >= 0.3 && <0.4
                , servant ==0.4.*
+               , servant-server ==0.4.*
+               , servant-blaze ==0.4.*
+               , either ==4.4.*
   exposed-modules: Hazard
                  , Hazard.HttpAuth
                  , Hazard.Games
                  , Hazard.Model
                  , Hazard.Routes
+                 , Hazard.UserAPI
                  , Hazard.Users
                  , Hazard.Views
   default-language:    Haskell2010

@@ -19,6 +19,8 @@
 
 module Hazard.Users ( UserDB
                     , UserID
+                    , User
+                    , UserCreationRequest
                     , addUser
                     , authenticate
                     , getUserByID
