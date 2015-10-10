@@ -41,7 +41,7 @@ userAPI :: Proxy UserAPI
 userAPI = Proxy
 
 
-serverT :: ServerT UserAPI (ReaderT UserDB STM)
+serverT :: ServerT UserAPI UserHandler
 serverT = allUsers :<|> addUser :<|> oneUser
 
 
@@ -49,7 +49,10 @@ server :: UserDB -> Server UserAPI
 server userDB = enter (readerToEither userDB) serverT
 
 
-allUsers :: ReaderT UserDB STM [(UserID, Text)]
+type UserHandler = ReaderT UserDB STM
+
+
+allUsers :: UserHandler [(UserID, Text)]
 allUsers = do
   userDB <- ask
   lift $ map (second decodeUtf8) <$> getAllUsers userDB
@@ -59,17 +62,17 @@ addUser :: UserCreationRequest -> m User
 addUser = undefined
 
 
-oneUser :: UserID -> ReaderT UserDB STM User
+oneUser :: UserID -> UserHandler User
 oneUser userID = do
   userDB <- ask
   lift $ fromMaybe (terror "no such user") <$> getUserByID userDB userID
 
 
-readerToEither :: UserDB -> ReaderT UserDB STM :~> EitherT ServantErr IO
+readerToEither :: UserDB -> UserHandler :~> EitherT ServantErr IO
 readerToEither userDB = Nat (readerToEither' userDB)
 
 
-readerToEither' :: UserDB -> ReaderT UserDB STM a -> EitherT ServantErr IO a
+readerToEither' :: UserDB -> UserHandler a -> EitherT ServantErr IO a
 readerToEither' userDB action = liftIO $ atomically (runReaderT action userDB)
 
 
