@@ -98,13 +98,14 @@ userWeb userDB pwgen = do
   post Route.users $ do
     userRequest <- expectJSON
     password <- liftIO pwgen
-    newID <- liftIO $ atomically $ addUser userDB userRequest password
-    case newID of
-     Just newID' -> do
+    newUser <- liftIO $ atomically $ addUser userDB userRequest password
+    case newUser of
+     Just newUser' -> do
+       let newID = getUserID newUser'
        setStatus created201
-       setHeader "Location" (renderRoute Route.user newID')
+       setHeader "Location" (renderRoute Route.user newID)
        json (object ["password" .= decodeUtf8 password
-                    ,"id" .= newID'])
+                    ,"id" .= newID])
      Nothing -> View.badRequest ("username already exists" :: Text)
 
   get Route.user $ \userID -> do

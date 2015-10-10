@@ -25,6 +25,7 @@ module Hazard.Users ( UserDB
                     , authenticate
                     , getUserByID
                     , getUserIDByName
+                    , getUserID
                     , makeUserDB
                     , makePassword
                     , getAllUsers
@@ -53,6 +54,10 @@ data User = User {
   _username :: ByteString,
   _password :: ByteString
   }
+
+
+getUserID :: User -> UserID
+getUserID = _userID
 
 
 instance ToJSON User where
@@ -130,7 +135,7 @@ authenticate userDB username password = do
      | otherwise -> Nothing
 
 
-addUser :: UserDB -> UserCreationRequest -> ByteString -> STM (Maybe UserID)
+addUser :: UserDB -> UserCreationRequest -> ByteString -> STM (Maybe User)
 addUser userDB req password =
   let username = encodeUtf8 (reqUsername req)
       users' = unUserDB userDB
@@ -143,7 +148,7 @@ addUser userDB req password =
        let newID = UserID (length allUsers)
        let newUser = User newID username password
        writeTVar users' (V.snoc allUsers newUser)
-       return $ Just newID
+       return $ Just newUser
 
 
 makePassword :: MonadRandom m => m ByteString
