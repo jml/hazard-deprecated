@@ -29,7 +29,7 @@ import Control.Monad.Trans.Reader
 import Servant
 import Servant.HTML.Blaze (HTML)
 
-import Hazard.Users (UserCreationRequest, User, UserDB, UserID, getAllUsers)
+import Hazard.Users (UserCreationRequest, User, UserDB, UserID, getAllUsers, getUserByID)
 
 
 type UserAPI = "users" :> Get '[JSON, HTML] [(UserID, Text)]
@@ -59,8 +59,10 @@ addUser :: UserCreationRequest -> m User
 addUser = undefined
 
 
-oneUser :: UserID -> m User
-oneUser = undefined
+oneUser :: UserID -> ReaderT UserDB STM User
+oneUser userID = do
+  userDB <- ask
+  lift $ fromMaybe (terror "no such user") <$> getUserByID userDB userID
 
 
 readerToEither :: UserDB -> ReaderT UserDB STM :~> EitherT ServantErr IO
