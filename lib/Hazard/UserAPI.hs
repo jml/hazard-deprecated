@@ -23,13 +23,22 @@ module Hazard.UserAPI (userAPI, server) where
 import BasicPrelude
 
 import Control.Concurrent.STM (STM, atomically)
+import Control.Monad.Random (MonadRandom, evalRandIO)
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Reader
 
 import Servant
 import Servant.HTML.Blaze (HTML)
 
-import Hazard.Users (UserCreationRequest, User, UserDB, UserID, getAllUsers, getUserByID)
+import Hazard.Users (
+  UserCreationRequest,
+  User,
+  UserDB,
+  UserID,
+  addUser,
+  getAllUsers,
+  getUserByID,
+  )
 
 
 type UserAPI = "users" :> Get '[JSON, HTML] [(UserID, Text)]
@@ -42,37 +51,56 @@ userAPI = Proxy
 
 
 serverT :: ServerT UserAPI UserHandler
-serverT = allUsers :<|> addUser :<|> oneUser
+serverT = allUsers :<|> makeUser :<|> oneUser
 
 
-server :: UserDB -> Server UserAPI
-server userDB = enter (readerToEither userDB) serverT
+server :: UserDB -> PasswordGenerator -> Server UserAPI
+server userDB pwgen = enter (readerToEither userDB pwgen) serverT
 
 
-type UserHandler = ReaderT UserDB STM
+type UserHandler = ReaderT (UserDB, ByteString) STM
+
+type PasswordGenerator = forall m. MonadRandom m => m ByteString
+
+
+getDatabase :: UserHandler UserDB
+getDatabase = fst <$> ask
+
+
+generatePassword :: UserHandler ByteString
+generatePassword = snd <$> ask
 
 
 allUsers :: UserHandler [(UserID, Text)]
 allUsers = do
-  userDB <- ask
+  userDB <- getDatabase
   lift $ map (second decodeUtf8) <$> getAllUsers userDB
 
 
-addUser :: UserCreationRequest -> m User
-addUser = undefined
+makeUser :: UserCreationRequest -> UserHandler User
+makeUser userRequest = do
+  userDB <- getDatabase
+  password <- generatePassword
+  user <- lift $ addUser userDB userRequest password
+  return $ fromMaybe (terror "user already exists") user
 
 
 oneUser :: UserID -> UserHandler User
 oneUser userID = do
-  userDB <- ask
+  userDB <- getDatabase
   lift $ fromMaybe (terror "no such user") <$> getUserByID userDB userID
 
 
-readerToEither :: UserDB -> UserHandler :~> EitherT ServantErr IO
-readerToEither userDB = Nat (readerToEither' userDB)
+readerToEither :: UserDB -> PasswordGenerator -> UserHandler :~> EitherT ServantErr IO
+readerToEither userDB pwgen = Nat (readerToEither' userDB pwgen)
 
 
-readerToEither' :: UserDB -> UserHandler a -> EitherT ServantErr IO a
-readerToEither' userDB action = liftIO $ atomically (runReaderT action userDB)
+readerToEither' :: UserDB -> PasswordGenerator -> UserHandler a -> EitherT ServantErr IO a
+readerToEither' userDB pwgen action = do
+  -- XXX: Assumes we only need to generate a password once per user request.
+  -- I'm pretty sure the only alternative is to do unsafePerformIO for the
+  -- password generation, or just give up and do the whole action in IO.
+  password <- liftIO $ evalRandIO pwgen
+  liftIO $ atomically (runReaderT action (userDB, password))
 
 
