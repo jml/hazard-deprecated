@@ -1,8 +1,9 @@
 { mkDerivation, aeson, base, base64-bytestring, basic-prelude
 , blaze-html, bytestring, containers, errors, haverer, hspec-wai
 , hspec-wai-json, http-types, lens, MonadRandom, mtl, path-pieces
-, random, Spock, stdenv, stm, tasty, tasty-hspec, tasty-quickcheck
-, text, transformers, unordered-containers, vector, wai, wai-extra
+, random, servant, Spock, stdenv, stm, tasty, tasty-hspec
+, tasty-quickcheck, text, transformers, unordered-containers
+, vector, wai, wai-extra
 }:
 mkDerivation {
   pname = "hazard";
@@ -12,8 +13,8 @@ mkDerivation {
   isExecutable = true;
   buildDepends = [
     aeson base basic-prelude blaze-html bytestring containers errors
-    haverer http-types lens MonadRandom mtl path-pieces random Spock
-    stm tasty-quickcheck text transformers vector wai wai-extra
+    haverer http-types lens MonadRandom mtl path-pieces random servant
+    Spock stm tasty-quickcheck text transformers vector wai wai-extra
   ];
   testDepends = [
     aeson base base64-bytestring basic-prelude bytestring errors
@@ -21,6 +22,6 @@ mkDerivation {
     Spock stm tasty tasty-hspec tasty-quickcheck text
     unordered-containers wai wai-extra
   ];
-  description = "An HTTP API for playing Love Letter";
+  description = "An HTTP API for playing a lovely card game";
   license = stdenv.lib.licenses.asl20;
 }

@@ -54,6 +54,7 @@ library
                , path-pieces
                , blaze-html
                , haverer >= 0.3 && <0.4
+               , servant ==0.4.*
   exposed-modules: Hazard
                  , Hazard.HttpAuth
                  , Hazard.Games
