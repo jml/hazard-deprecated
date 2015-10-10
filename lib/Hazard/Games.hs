@@ -382,19 +382,19 @@ getScores game =
    Finished { _outcome = outcome } -> map (second Just) (H.finalScores outcome)
 
 
-type SlotActionT e m a = StateT GameSlot (EitherT (GameError e) m) a
+type SlotActionT e m a = StateT GameSlot (ExceptT (GameError e) m) a
 type SlotAction e a = SlotActionT e Identity a
 
 
 runSlotActionT :: SlotActionT e m a -> GameSlot -> m (Either (GameError e) (a, GameSlot))
-runSlotActionT action slot = runEitherT (runStateT action slot)
+runSlotActionT action slot = runExceptT (runStateT action slot)
 
 
 runSlotAction :: SlotAction e a -> GameSlot -> Either (GameError e) (a, GameSlot)
 runSlotAction action slot = runIdentity $ runSlotActionT action slot
 
 
-liftEither :: (Monad m, MonadTrans t) => EitherT e m a -> t (EitherT (GameError e) m) a
+liftEither :: (Monad m, MonadTrans t) => ExceptT e m a -> t (ExceptT (GameError e) m) a
 liftEither = lift . fmapLT OtherError
 
 
@@ -402,7 +402,7 @@ throwOtherError :: MonadError (GameError e) m => e -> m a
 throwOtherError = throwError . OtherError
 
 
-modifyGame :: Monad m => (Game -> EitherT (GameError e) m Game) -> SlotActionT e m ()
+modifyGame :: Monad m => (Game -> ExceptT (GameError e) m Game) -> SlotActionT e m ()
 modifyGame f = do
   slot <- get
   let game = gameState slot

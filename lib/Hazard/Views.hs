@@ -35,7 +35,7 @@ import BasicPrelude hiding (round)
 
 import Data.Aeson (ToJSON, (.=), encode, object)
 import Data.ByteString.Lazy (toStrict)
-import Data.Foldable (Foldable, toList)
+import Data.Foldable (toList)
 import qualified Data.Text as Text
 import Network.HTTP.Types.Status
 import Text.Blaze.Html5 ((!))

@@ -71,7 +71,7 @@ getGameSlot hazard i = do
   return $ games' !? i
 
 
-tryGetSlot :: Hazard -> GameID -> EitherT (GameError e) STM GameSlot
+tryGetSlot :: Hazard -> GameID -> ExceptT (GameError e) STM GameSlot
 tryGetSlot hazard i = do
   games' <- lift $ readTVar (games hazard)
   (games' !? i) ?? GameNotFound i
@@ -98,7 +98,7 @@ type SlotResult e a = Either (GameError e) (a, GameSlot)
 
 
 modifySlot :: Hazard -> GameID -> (GameSlot -> SlotResult e a) -> STM (SlotResult e a)
-modifySlot hazard i f = runEitherT $ do
+modifySlot hazard i f = runExceptT $ do
   slot <- tryGetSlot hazard i
   (a, slot') <- hoistEither $ f slot
   lift $ setGame slot'

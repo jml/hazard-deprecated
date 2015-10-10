@@ -193,7 +193,7 @@ hazardWeb' hazard pwgen deckGen = do
     withAuth (users hazard) $ \poster -> do
     playRequest <- expectJSON
     deck <- liftIO deckGen
-    result <- liftIO $ atomically $ runEitherT $ do
+    result <- liftIO $ atomically $ runExceptT $ do
       slot <- tryGetSlot hazard gameId
       -- TODO: Use types to enforce validated play requests
       let validation = validatePlayRequest poster roundId playRequest
