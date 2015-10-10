@@ -41,6 +41,15 @@ import Hazard.Users (
   )
 
 
+-- TODO:  Next steps:
+--
+-- * try running this and see what happens
+--   * make a second executable for the servant stuff
+-- * get the same error message handling that we have in the Spock version
+-- * make sure the output is the same as the other version
+-- * run tests against this
+--   * maybe the same tests as the Spock ones?
+
 type UserAPI = "users" :> Get '[JSON, HTML] [(UserID, Text)]
                :<|> "users" :> ReqBody '[JSON] UserCreationRequest :> Post '[JSON] User
                :<|> "user" :> Capture "userID" UserID :> Get '[JSON, HTML] User
