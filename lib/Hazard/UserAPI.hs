@@ -19,7 +19,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Hazard.UserAPI (userAPI, server) where
+module Hazard.UserAPI (PasswordGenerator, UserAPI, userAPI, server) where
 
 import BasicPrelude
 

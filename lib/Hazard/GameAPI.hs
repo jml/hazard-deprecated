@@ -19,27 +19,46 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Hazard.GameAPI (GameAPI) where
+module Hazard.GameAPI (GameAPI, gameAPI, server) where
+
+import BasicPrelude
+
+import Control.Monad.Trans.Either (EitherT)
 
 import Servant
-import Servant.HTML.Blaze (HTML)
 
-import Hazard.Games (Game, GameID, RoundID)
+import Hazard.Games (GameSlot, GameID, RoundID)
 import Hazard.Users (UserID)
-import Haverer (
-  Result,
-  Round,
-  )
+import Haverer (Round)
 
 
 -- XXX: Make this a thing.
-data Auth
+-- data Auth
 
 type GameAPI =
-               "games"                           :> Get  '[JSON, HTML] [Game]
-  :<|> Auth :> "games"                           :> Post '[JSON]       Game
-  :<|>         "game" :> Capture "gameID" GameID :> Get  '[JSON, HTML] Game
-  :<|> Auth :> "game" :> Capture "gameID" GameID :> Post '[JSON]       Game
+               "games"                           :> Get  '[JSON] [GameSlot]
+--  :<|> Auth :> "games"                           :> Post '[JSON]       Game
+  :<|>         "game" :> Capture "gameID" GameID :> Get  '[JSON] GameSlot
+--  :<|> Auth :> "game" :> Capture "gameID" GameID :> Post '[JSON]       Game
 
-  :<|>         "game" :> Capture "gameID" GameID :> "round" :> Capture "roundID" RoundID :> Get  '[JSON, HTML] (Round UserID)
-  :<|> Auth :> "game" :> Capture "gameID" GameID :> "round" :> Capture "roundID" RoundID :> Post '[JSON]       (Result UserID)
+  :<|>         "game" :> Capture "gameID" GameID :> "round" :> Capture "roundID" RoundID :> Get  '[JSON] (Round UserID)
+--  :<|> Auth :> "game" :> Capture "gameID" GameID :> "round" :> Capture "roundID" RoundID :> Post '[JSON]       (Result UserID)
+
+
+gameAPI :: Proxy GameAPI
+gameAPI = Proxy
+
+
+type GameHandler = EitherT ServantErr IO
+
+server :: Server GameAPI
+server = getGames :<|> getGame :<|> getRound
+
+getGames :: GameHandler [GameSlot]
+getGames = undefined
+
+getGame :: GameID -> GameHandler GameSlot
+getGame = undefined
+
+getRound :: GameID -> RoundID -> GameHandler (Round UserID)
+getRound = undefined

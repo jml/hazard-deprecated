@@ -14,6 +14,8 @@
 
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Main where
 
@@ -21,13 +23,24 @@ import BasicPrelude
 
 import Control.Concurrent.STM (atomically)
 import Network.Wai.Handler.Warp (run)
-import Servant.Server (serve)
+import Servant
 
-import Hazard.UserAPI (userAPI, server)
-import Hazard.Users (makeUserDB, makePassword)
+import qualified Hazard.GameAPI as GameAPI
+import qualified Hazard.UserAPI as UserAPI
+import Hazard.Users (UserDB, makeUserDB, makePassword)
+
+
+type API = UserAPI.UserAPI :<|> GameAPI.GameAPI
+
+api :: Proxy API
+api = Proxy
+
+
+server :: UserDB -> UserAPI.PasswordGenerator -> Server API
+server userDB pwgen = UserAPI.server userDB pwgen :<|> GameAPI.server
 
 
 main :: IO ()
 main = do
   userDB <- atomically makeUserDB
-  run 8080 (serve userAPI (server userDB makePassword))
+  run 8080 $ serve api $ server userDB makePassword
