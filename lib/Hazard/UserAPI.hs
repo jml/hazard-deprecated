@@ -13,6 +13,7 @@
 -- limitations under the License.
 
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -27,8 +28,12 @@ import Control.Monad.Random (MonadRandom, evalRandIO)
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Reader
 
+import Data.Aeson (ToJSON(..), (.=), object)
 import Servant
 import Servant.HTML.Blaze (HTML)
+import Text.Blaze (ToMarkup(..), (!))
+import qualified Text.Blaze.Html5 as H
+import Text.Blaze.Html5.Attributes (href)
 
 import Hazard.Users (
   UserCreationRequest,
@@ -37,26 +42,65 @@ import Hazard.Users (
   UserID,
   addUser,
   getAllUsers,
+  getUserID,
   getUserByID,
+  getUsername,
   )
 
 
 -- TODO:  Next steps:
 --
--- * try running this and see what happens
---   * make a second executable for the servant stuff
--- * get the same error message handling that we have in the Spock version
 -- * make sure the output is the same as the other version
 -- * run tests against this
 --   * maybe the same tests as the Spock ones?
+--
+-- Bugs
+-- * Broken link on "user" page (goes to /user/user/0 rather than /user/0)
+-- * 500 on "no such user"
+-- * 500 on "user already exists"
+-- * Password not returned on user creation
+-- * Documentation missing when browsing on HTML
+-- * Location not included in created user
+-- * /users includes ID and username, rather than just user name
+--
+-- Ugliness
+-- * PublicUser type should probably be phantom type on User
+-- * Linking to users has a bunch of ugly code that will need to be repeated
+-- * Rather than using Reader monad, should just pass parameters to functions
 
-type UserAPI = "users" :> Get '[JSON, HTML] [(UserID, Text)]
+type UserAPI = "users" :> Get '[JSON, HTML] [PublicUser]
                :<|> "users" :> ReqBody '[JSON] UserCreationRequest :> Post '[JSON] User
-               :<|> "user" :> Capture "userID" UserID :> Get '[JSON, HTML] User
+               :<|> "user" :> Capture "userID" UserID :> Get '[JSON, HTML] PublicUser
 
 
 userAPI :: Proxy UserAPI
 userAPI = Proxy
+
+
+userLink :: Proxy ("user" :> Capture "userID" UserID :> Get '[HTML] PublicUser)
+userLink = Proxy
+
+
+newtype PublicUser = PublicUser (UserID, Text)
+
+publicUser :: User -> PublicUser
+publicUser user = PublicUser (getUserID user, decodeUtf8 (getUsername user))
+
+
+instance ToMarkup PublicUser where
+
+  toMarkup (PublicUser (userID, username)) = H.a ! href (H.toValue (show (safeLink userAPI userLink userID))) $ H.text username
+
+
+instance ToMarkup [PublicUser] where
+
+  toMarkup users = H.ul $ mapM_ (H.li . toMarkup) users
+
+
+instance ToJSON PublicUser where
+  toJSON (PublicUser (userID, username)) = object [ "username" .= username
+                                                  , "id" .= userID
+                                                  ]
 
 
 serverT :: ServerT UserAPI UserHandler
@@ -80,10 +124,10 @@ generatePassword :: UserHandler ByteString
 generatePassword = snd <$> ask
 
 
-allUsers :: UserHandler [(UserID, Text)]
+allUsers :: UserHandler [PublicUser]
 allUsers = do
   userDB <- getDatabase
-  lift $ map (second decodeUtf8) <$> getAllUsers userDB
+  lift $ map PublicUser <$> map (second decodeUtf8) <$> getAllUsers userDB
 
 
 makeUser :: UserCreationRequest -> UserHandler User
@@ -94,10 +138,10 @@ makeUser userRequest = do
   return $ fromMaybe (terror "user already exists") user
 
 
-oneUser :: UserID -> UserHandler User
+oneUser :: UserID -> UserHandler PublicUser
 oneUser userID = do
   userDB <- getDatabase
-  lift $ fromMaybe (terror "no such user") <$> getUserByID userDB userID
+  lift $ publicUser <$> fromMaybe (terror "no such user") <$> getUserByID userDB userID
 
 
 readerToEither :: UserDB -> PasswordGenerator -> UserHandler :~> EitherT ServantErr IO

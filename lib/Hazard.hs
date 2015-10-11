@@ -68,6 +68,7 @@ import Hazard.Users (
   UserID,
   addUser,
   authenticate,
+  getUserID,
   getUserByID,
   getUserIDByName,
   makePassword,

@@ -26,6 +26,7 @@ module Hazard.Users ( UserDB
                     , getUserByID
                     , getUserIDByName
                     , getUserID
+                    , getUsername
                     , makeUserDB
                     , makePassword
                     , getAllUsers
@@ -46,6 +47,10 @@ import Web.PathPieces (PathPiece)
 import Data.Aeson (FromJSON(..), ToJSON(..), (.=), Value(Object, String), object, (.:))
 import Test.Tasty.QuickCheck (Arbitrary, arbitrary)
 
+-- XXX: I wanted to keep this module free of servant stuff so I could clearly
+-- show what was **new** in the servant handling code. Oh well.
+import Servant.Common.Text
+
 
 -- TODO: Stored as username / password. Password is in the clear, which is
 -- terrible.  jml/hazard#4
@@ -59,6 +64,9 @@ data User = User {
 getUserID :: User -> UserID
 getUserID = _userID
 
+getUsername :: User -> ByteString
+getUsername = _username
+
 
 instance ToJSON User where
   toJSON user = object [ "username" .= decodeUtf8 (_username user)
@@ -66,11 +74,11 @@ instance ToJSON User where
                        ]
 
 
-newtype UserID = UserID Int deriving (Eq, Ord, Show, PathPiece)
+newtype UserID = UserID { _unUserID :: Int } deriving (Eq, Ord, Show, PathPiece)
 
 
 instance ToJSON UserID where
-  toJSON (UserID i) = toJSON (show i)
+  toJSON = toJSON . show . _unUserID
 
 
 instance FromJSON UserID where
@@ -78,8 +86,15 @@ instance FromJSON UserID where
   parseJSON _ = mzero
 
 
+instance FromText UserID where
+  fromText = map UserID . fromText
+
+instance ToText UserID where
+  toText = toText . _unUserID
+
+
 toJSONKey :: UserID -> Text
-toJSONKey (UserID i) = show i
+toJSONKey = show . _unUserID
 
 
 instance Arbitrary UserID where
