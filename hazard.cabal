@@ -59,6 +59,7 @@ library
                , servant-server ==0.4.*
                , servant-blaze ==0.4.*
                , either ==4.4.*
+               , bytestring-conversion ==0.3.*
   exposed-modules: Hazard
                  , Hazard.HttpAuth
                  , Hazard.Games

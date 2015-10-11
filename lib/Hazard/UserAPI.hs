@@ -30,6 +30,7 @@ import Control.Monad.Trans.Either
 import Control.Monad.Trans.Reader
 
 import Data.Aeson (ToJSON(..), (.=), object)
+import Data.ByteString.Conversion.To (ToByteString(..))
 import Servant
 import Servant.HTML.Blaze (HTML)
 import Text.Blaze (ToMarkup(..), (!))
@@ -59,7 +60,6 @@ import Hazard.Users (
 -- * Broken link on "user" page (goes to /user/user/0 rather than /user/0)
 -- * Password not returned on user creation
 -- * Documentation missing when browsing on HTML
--- * Location not included in created user
 -- * /users includes ID and username, rather than just user name
 --
 -- Ugliness
@@ -68,7 +68,7 @@ import Hazard.Users (
 
 
 type UserAPI = "users" :> Get '[JSON, HTML] [PublicUser]
-               :<|> "users" :> ReqBody '[JSON] UserCreationRequest :> Post '[JSON] User
+               :<|> "users" :> ReqBody '[JSON] UserCreationRequest :> Post '[JSON] (Headers '[Header "Location" URI] User)
                :<|> "user" :> Capture "userID" UserID :> Get '[JSON, HTML] PublicUser
 
 
@@ -102,6 +102,10 @@ instance ToJSON PublicUser where
                                                   ]
 
 
+instance ToByteString URI where
+  builder = builder . show
+
+
 serverT :: ServerT UserAPI UserHandler
 serverT = allUsers :<|> makeUser :<|> oneUser
 
@@ -129,14 +133,17 @@ allUsers = do
   lift $ lift $ map PublicUser <$> map (second decodeUtf8) <$> getAllUsers userDB
 
 
-makeUser :: UserCreationRequest -> UserHandler User
+makeUser :: UserCreationRequest -> UserHandler (Headers '[Header "Location" URI] User)
 makeUser userRequest = do
   userDB <- getDatabase
   password <- generatePassword
   user <- lift $ lift $ addUser userDB userRequest password
   case user of
-    Just user' -> return user'
+    Just user' -> return $ addHeader (linkToUser user') user'
     Nothing -> throwError $ err400 { errBody = "username already exists" }
+  where
+    -- XXX: Duplicated
+    linkToUser u = safeLink userAPI userLink (getUserID u)
 
 
 oneUser :: UserID -> UserHandler PublicUser
