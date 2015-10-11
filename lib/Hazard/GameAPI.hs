@@ -30,7 +30,7 @@ import Data.Vector (toList)
 
 import Servant
 
-import Hazard.Games (GameSlot, GameID, RoundID)
+import Hazard.Games (GameSlot, GameID, RoundID, GameCreationRequest, Validated(..))
 import Hazard.Model (Hazard, getGames, getGameSlot, getRound)
 import Hazard.Users (UserID)
 import Haverer (Round)
@@ -40,9 +40,9 @@ import Haverer (Round)
 -- data Auth
 
 type GameAPI =
-               "games"                           :> Get  '[JSON] [GameSlot]
---  :<|> Auth :> "games"                           :> Post '[JSON]       Game
-  :<|>         "game" :> Capture "gameID" GameID :> Get  '[JSON] GameSlot
+               "games"                                                     :> Get  '[JSON] [GameSlot]
+  :<|>         "games" :> ReqBody '[JSON] (GameCreationRequest 'Unchecked) :> Post '[JSON] GameSlot
+  :<|>         "game" :> Capture "gameID" GameID                           :> Get  '[JSON] GameSlot
 --  :<|> Auth :> "game" :> Capture "gameID" GameID :> Post '[JSON]       Game
 
   :<|>         "game" :> Capture "gameID" GameID :> "round" :> Capture "roundID" RoundID :> Get  '[JSON] (Round UserID)
@@ -56,11 +56,15 @@ gameAPI = Proxy
 type GameHandler = EitherT ServantErr IO
 
 server :: Hazard -> Server GameAPI
-server hazard = getAllGames hazard :<|> getGame hazard :<|> getOneRound hazard
+server hazard = getAllGames hazard :<|> createOneGame hazard :<|> getGame hazard :<|> getOneRound hazard
 
 
 getAllGames :: Hazard -> GameHandler [GameSlot]
 getAllGames = map toList . liftIO . atomically . getGames
+
+
+createOneGame :: Hazard -> GameCreationRequest 'Unchecked -> GameHandler GameSlot
+createOneGame = undefined
 
 
 getGame :: Hazard -> GameID -> GameHandler GameSlot
