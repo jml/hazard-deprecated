@@ -24,6 +24,7 @@ module Hazard.UserAPI (userAPI, server) where
 import BasicPrelude
 
 import Control.Concurrent.STM (STM, atomically)
+import Control.Monad.Except (throwError)
 import Control.Monad.Random (MonadRandom, evalRandIO)
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Reader
@@ -56,8 +57,6 @@ import Hazard.Users (
 --
 -- Bugs
 -- * Broken link on "user" page (goes to /user/user/0 rather than /user/0)
--- * 500 on "no such user"
--- * 500 on "user already exists"
 -- * Password not returned on user creation
 -- * Documentation missing when browsing on HTML
 -- * Location not included in created user
@@ -66,7 +65,7 @@ import Hazard.Users (
 -- Ugliness
 -- * PublicUser type should probably be phantom type on User
 -- * Linking to users has a bunch of ugly code that will need to be repeated
--- * Rather than using Reader monad, should just pass parameters to functions
+
 
 type UserAPI = "users" :> Get '[JSON, HTML] [PublicUser]
                :<|> "users" :> ReqBody '[JSON] UserCreationRequest :> Post '[JSON] User
@@ -111,7 +110,7 @@ server :: UserDB -> PasswordGenerator -> Server UserAPI
 server userDB pwgen = enter (readerToEither userDB pwgen) serverT
 
 
-type UserHandler = ReaderT (UserDB, ByteString) STM
+type UserHandler = ReaderT (UserDB, ByteString) (EitherT ServantErr STM)
 
 type PasswordGenerator = forall m. MonadRandom m => m ByteString
 
@@ -127,21 +126,26 @@ generatePassword = snd <$> ask
 allUsers :: UserHandler [PublicUser]
 allUsers = do
   userDB <- getDatabase
-  lift $ map PublicUser <$> map (second decodeUtf8) <$> getAllUsers userDB
+  lift $ lift $ map PublicUser <$> map (second decodeUtf8) <$> getAllUsers userDB
 
 
 makeUser :: UserCreationRequest -> UserHandler User
 makeUser userRequest = do
   userDB <- getDatabase
   password <- generatePassword
-  user <- lift $ addUser userDB userRequest password
-  return $ fromMaybe (terror "user already exists") user
+  user <- lift $ lift $ addUser userDB userRequest password
+  case user of
+    Just user' -> return user'
+    Nothing -> throwError $ err400 { errBody = "username already exists" }
 
 
 oneUser :: UserID -> UserHandler PublicUser
 oneUser userID = do
   userDB <- getDatabase
-  lift $ publicUser <$> fromMaybe (terror "no such user") <$> getUserByID userDB userID
+  user <- lift $ lift $ getUserByID userDB userID
+  case user of
+    Just user' -> return (publicUser user')
+    Nothing -> throwError $ err404 { errBody = "no such user" }
 
 
 readerToEither :: UserDB -> PasswordGenerator -> UserHandler :~> EitherT ServantErr IO
@@ -154,6 +158,6 @@ readerToEither' userDB pwgen action = do
   -- I'm pretty sure the only alternative is to do unsafePerformIO for the
   -- password generation, or just give up and do the whole action in IO.
   password <- liftIO $ evalRandIO pwgen
-  liftIO $ atomically (runReaderT action (userDB, password))
-
+  result <- liftIO $ atomically (runEitherT (runReaderT action (userDB, password)))
+  hoistEither result
 
