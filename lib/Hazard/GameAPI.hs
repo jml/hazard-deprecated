@@ -30,18 +30,30 @@ import Data.Vector (toList)
 
 import Servant
 
+import Hazard.HttpAuth (Credentials(..), PasswordAuth, PasswordProtected, protectWith)
+
 import Hazard.Games (GameSlot, GameID, RoundID, GameCreationRequest, Validated(..))
-import Hazard.Model (Hazard, getGames, getGameSlot, getRound)
-import Hazard.Users (UserID)
+import Hazard.Model (Hazard, getGames, getGameSlot, getRound, users)
+import Hazard.Users (User, UserID, authenticate)
 import Haverer (Round)
 
 
--- XXX: Make this a thing.
--- data Auth
+-- XXX: Nothing to do with Game. General authentication API.
+type Auth = PasswordAuth User
+
+type AuthProtected = PasswordProtected User
+
+auth :: Hazard -> handlers -> AuthProtected handlers
+auth hazard = protectWith "Hazard" checkPassword
+  where
+    checkPassword creds =
+      liftIO $ atomically $ authenticate (users hazard) (username creds) (password creds)
+-- End authentication API
+
 
 type GameAPI =
                "games"                                                     :> Get  '[JSON] [GameSlot]
-  :<|>         "games" :> ReqBody '[JSON] (GameCreationRequest 'Unchecked) :> Post '[JSON] GameSlot
+  :<|> Auth :> "games" :> ReqBody '[JSON] (GameCreationRequest 'Unchecked) :> Post '[JSON] GameSlot
   :<|>         "game" :> Capture "gameID" GameID                           :> Get  '[JSON] GameSlot
 --  :<|> Auth :> "game" :> Capture "gameID" GameID :> Post '[JSON]       Game
 
@@ -63,8 +75,10 @@ getAllGames :: Hazard -> GameHandler [GameSlot]
 getAllGames = map toList . liftIO . atomically . getGames
 
 
-createOneGame :: Hazard -> GameCreationRequest 'Unchecked -> GameHandler GameSlot
-createOneGame = undefined
+createOneGame :: Hazard -> AuthProtected (User -> GameCreationRequest 'Unchecked -> GameHandler GameSlot)
+createOneGame hazard = auth hazard createGame'
+  where
+    createGame' = undefined
 
 
 getGame :: Hazard -> GameID -> GameHandler GameSlot
