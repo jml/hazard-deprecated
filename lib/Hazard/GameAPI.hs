@@ -24,13 +24,14 @@ module Hazard.GameAPI (GameAPI, gameAPI, server) where
 import BasicPrelude
 
 import Control.Concurrent.STM (atomically)
+import Control.Monad.Except (throwError)
 import Control.Monad.Trans.Either (EitherT)
 import Data.Vector (toList)
 
 import Servant
 
 import Hazard.Games (GameSlot, GameID, RoundID)
-import Hazard.Model (Hazard, getGames)
+import Hazard.Model (Hazard, getGames, getGameSlot)
 import Hazard.Users (UserID)
 import Haverer (Round)
 
@@ -55,13 +56,18 @@ gameAPI = Proxy
 type GameHandler = EitherT ServantErr IO
 
 server :: Hazard -> Server GameAPI
-server hazard = getAllGames hazard :<|> getGame :<|> getRound
+server hazard = getAllGames hazard :<|> getGame hazard :<|> getRound
 
 getAllGames :: Hazard -> GameHandler [GameSlot]
 getAllGames = map toList . liftIO . atomically . getGames
 
-getGame :: GameID -> GameHandler GameSlot
-getGame = undefined
+getGame :: Hazard -> GameID -> GameHandler GameSlot
+getGame hazard gameId = do
+  game <- liftIO $ atomically $ getGameSlot hazard gameId
+  case game of
+    Just game' -> return game'
+    Nothing -> throwError $ err404 { errBody = "no such game" }
+
 
 getRound :: GameID -> RoundID -> GameHandler (Round UserID)
 getRound = undefined
