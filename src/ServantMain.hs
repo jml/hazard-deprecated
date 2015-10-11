@@ -25,9 +25,11 @@ import Control.Concurrent.STM (atomically)
 import Network.Wai.Handler.Warp (run)
 import Servant
 
+import Hazard (makeHazard)
+import Hazard.Model (Hazard, users)
 import qualified Hazard.GameAPI as GameAPI
 import qualified Hazard.UserAPI as UserAPI
-import Hazard.Users (UserDB, makeUserDB, makePassword)
+import Hazard.Users (makePassword)
 
 
 type API = UserAPI.UserAPI :<|> GameAPI.GameAPI
@@ -36,11 +38,11 @@ api :: Proxy API
 api = Proxy
 
 
-server :: UserDB -> UserAPI.PasswordGenerator -> Server API
-server userDB pwgen = UserAPI.server userDB pwgen :<|> GameAPI.server
+server :: Hazard -> UserAPI.PasswordGenerator -> Server API
+server hazard pwgen = UserAPI.server (users hazard) pwgen :<|> GameAPI.server hazard
 
 
 main :: IO ()
 main = do
-  userDB <- atomically makeUserDB
-  run 8080 $ serve api $ server userDB makePassword
+  hazard <- atomically makeHazard
+  run 8080 $ serve api $ server hazard makePassword

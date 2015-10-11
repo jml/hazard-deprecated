@@ -23,11 +23,14 @@ module Hazard.GameAPI (GameAPI, gameAPI, server) where
 
 import BasicPrelude
 
+import Control.Concurrent.STM (atomically)
 import Control.Monad.Trans.Either (EitherT)
+import Data.Vector (toList)
 
 import Servant
 
 import Hazard.Games (GameSlot, GameID, RoundID)
+import Hazard.Model (Hazard, getGames)
 import Hazard.Users (UserID)
 import Haverer (Round)
 
@@ -51,11 +54,11 @@ gameAPI = Proxy
 
 type GameHandler = EitherT ServantErr IO
 
-server :: Server GameAPI
-server = getGames :<|> getGame :<|> getRound
+server :: Hazard -> Server GameAPI
+server hazard = getAllGames hazard :<|> getGame :<|> getRound
 
-getGames :: GameHandler [GameSlot]
-getGames = undefined
+getAllGames :: Hazard -> GameHandler [GameSlot]
+getAllGames = map toList . liftIO . atomically . getGames
 
 getGame :: GameID -> GameHandler GameSlot
 getGame = undefined
