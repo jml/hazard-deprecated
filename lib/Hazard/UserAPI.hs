@@ -58,7 +58,6 @@ import Hazard.Users (
 --
 -- Bugs
 -- * Broken link on "user" page (goes to /user/user/0 rather than /user/0)
--- * Password not returned on user creation
 -- * Documentation missing when browsing on HTML
 -- * /users includes ID and username, rather than just user name
 --

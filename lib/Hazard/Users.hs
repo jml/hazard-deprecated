@@ -49,7 +49,7 @@ import Test.Tasty.QuickCheck (Arbitrary, arbitrary)
 
 -- XXX: I wanted to keep this module free of servant stuff so I could clearly
 -- show what was **new** in the servant handling code. Oh well.
-import Servant.Common.Text
+import Servant.Common.Text (FromText(..), ToText(..))
 
 
 -- TODO: Stored as username / password. Password is in the clear, which is
@@ -71,6 +71,10 @@ getUsername = _username
 instance ToJSON User where
   toJSON user = object [ "username" .= decodeUtf8 (_username user)
                        , "id" .= _userID user
+                         -- XXX: Added to make new servant API work. Really,
+                         -- we should update the types so that it's crystal
+                         -- clear when we want private or public information.
+                       , "password" .= decodeUtf8 (_password user)
                        ]
 
 
