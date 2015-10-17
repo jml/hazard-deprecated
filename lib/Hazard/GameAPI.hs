@@ -25,16 +25,17 @@ import BasicPrelude hiding (round)
 
 import Control.Concurrent.STM (atomically)
 import Control.Monad.Except (throwError)
-import Control.Monad.Trans.Either (EitherT)
+import Control.Monad.Trans.Either (EitherT, bimapEitherT, hoistEither)
+import qualified Data.ByteString.Lazy as LazyBytes
 import Data.Vector (toList)
 
 import Servant
 
 import Hazard.HttpAuth (Credentials(..), PasswordAuth, PasswordProtected, protectWith)
 
-import Hazard.Games (GameSlot, GameID, RoundID, GameCreationRequest, Validated(..))
-import Hazard.Model (Hazard, getGames, getGameSlot, getRound, users)
-import Hazard.Users (User, UserID, authenticate)
+import Hazard.Games (GameSlot, GameID, RoundID, GameCreationRequest, Validated(..), validateCreationRequest)
+import Hazard.Model (Hazard, createGame, getGames, getGameSlot, getRound, users)
+import Hazard.Users (User, UserID, authenticate, getUserID)
 import Haverer (Round)
 
 
@@ -76,9 +77,16 @@ getAllGames = map toList . liftIO . atomically . getGames
 
 
 createOneGame :: Hazard -> AuthProtected (User -> GameCreationRequest 'Unchecked -> GameHandler GameSlot)
-createOneGame hazard = auth hazard createGame'
+createOneGame hazard = auth hazard (createGame' hazard)
+
+
+createGame' :: Hazard -> User -> GameCreationRequest 'Unchecked -> GameHandler GameSlot
+createGame' hazard user request = do
+  req <- bimapEitherT toServantErr id (hoistEither (validateCreationRequest request))
+  (_gameID, game) <- liftIO $ atomically $ createGame hazard (getUserID user) req
+  return game
   where
-    createGame' = undefined
+    toServantErr e = err400 { errBody = LazyBytes.fromStrict (encodeUtf8 (show e)) }
 
 
 getGame :: Hazard -> GameID -> GameHandler GameSlot
