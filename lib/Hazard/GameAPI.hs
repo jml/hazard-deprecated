@@ -19,12 +19,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Hazard.GameAPI (GameAPI, gameAPI, server) where
+module Hazard.GameAPI (DeckGenerator, GameAPI, gameAPI, makeDeck, server) where
 
 import BasicPrelude hiding (round)
 
 import Control.Concurrent.STM (atomically)
 import Control.Monad.Except (throwError)
+import Control.Monad.Random (evalRandIO)
 import Control.Monad.Trans.Either (EitherT, bimapEitherT, hoistEither)
 import qualified Data.ByteString.Lazy as LazyBytes
 import Data.Vector (toList)
@@ -33,10 +34,11 @@ import Servant
 
 import Hazard.HttpAuth (Credentials(..), PasswordAuth, PasswordProtected, protectWith)
 
-import Hazard.Games (GameSlot, GameID, RoundID, GameCreationRequest, Validated(..), validateCreationRequest)
-import Hazard.Model (Hazard, createGame, getGames, getGameSlot, getRound, users)
+import Hazard.Games (GameSlot, GameID, RoundID, GameCreationRequest, Validated(..), joinSlot, validateCreationRequest)
+import Hazard.Model (Hazard, applySlotAction, createGame, getGames, getGameSlot, getRound, users)
 import Hazard.Users (User, UserID, authenticate, getUserID)
-import Haverer (Round)
+
+import Haverer (FullDeck, Round, newDeck)
 
 
 -- XXX: Nothing to do with Game. General authentication API.
@@ -56,7 +58,7 @@ type GameAPI =
                "games"                                                     :> Get  '[JSON] [GameSlot]
   :<|> Auth :> "games" :> ReqBody '[JSON] (GameCreationRequest 'Unchecked) :> Post '[JSON] GameSlot
   :<|>         "game" :> Capture "gameID" GameID                           :> Get  '[JSON] GameSlot
---  :<|> Auth :> "game" :> Capture "gameID" GameID :> Post '[JSON]       Game
+  :<|> Auth :> "game" :> Capture "gameID" GameID                           :> Post '[JSON] GameSlot
 
   :<|>         "game" :> Capture "gameID" GameID :> "round" :> Capture "roundID" RoundID :> Get  '[JSON] (Round UserID)
 --  :<|> Auth :> "game" :> Capture "gameID" GameID :> "round" :> Capture "roundID" RoundID :> Post '[JSON]       (Result UserID)
@@ -68,8 +70,16 @@ gameAPI = Proxy
 
 type GameHandler = EitherT ServantErr IO
 
-server :: Hazard -> Server GameAPI
-server hazard = getAllGames hazard :<|> createOneGame hazard :<|> getGame hazard :<|> getOneRound hazard
+
+type DeckGenerator = IO FullDeck
+
+
+makeDeck :: DeckGenerator
+makeDeck = evalRandIO newDeck
+
+
+server :: Hazard -> DeckGenerator -> Server GameAPI
+server hazard deckGen = getAllGames hazard :<|> createOneGame hazard :<|> getGame hazard :<|> joinGame hazard deckGen :<|> getOneRound hazard
 
 
 getAllGames :: Hazard -> GameHandler [GameSlot]
@@ -88,6 +98,16 @@ createGame' hazard user request = do
   where
     toServantErr e = err400 { errBody = LazyBytes.fromStrict (encodeUtf8 (show e)) }
 
+
+joinGame :: Hazard -> IO FullDeck -> AuthProtected (User -> GameID -> GameHandler GameSlot)
+joinGame hazard deckGen = auth hazard (joinGame' hazard)
+  where
+    joinGame' _hazard joiner gameID = do
+      deck <- liftIO deckGen
+      result <- liftIO $ atomically $ applySlotAction hazard gameID (joinSlot deck (getUserID joiner))
+      snd <$> mapError toServantErr result
+    toServantErr e = err400 { errBody = LazyBytes.fromStrict (encodeUtf8 (show e)) }
+    mapError f = bimapEitherT f id  . hoistEither
 
 getGame :: Hazard -> GameID -> GameHandler GameSlot
 getGame hazard gameId = do

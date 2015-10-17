@@ -38,11 +38,11 @@ api :: Proxy API
 api = Proxy
 
 
-server :: Hazard -> UserAPI.PasswordGenerator -> Server API
-server hazard pwgen = UserAPI.server (users hazard) pwgen :<|> GameAPI.server hazard
+server :: Hazard -> UserAPI.PasswordGenerator -> GameAPI.DeckGenerator -> Server API
+server hazard pwgen deckGen = UserAPI.server (users hazard) pwgen :<|> GameAPI.server hazard deckGen
 
 
 main :: IO ()
 main = do
   hazard <- atomically makeHazard
-  run 8080 $ serve api $ server hazard makePassword
+  run 8080 $ serve api $ server hazard makePassword GameAPI.makeDeck
