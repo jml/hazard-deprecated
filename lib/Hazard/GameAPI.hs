@@ -56,11 +56,11 @@ auth hazard = protectWith "Hazard" checkPassword
 
 type GameAPI =
                "games"                                                     :> Get  '[JSON] [GameSlot]
-  :<|> Auth :> "games" :> ReqBody '[JSON] (GameCreationRequest 'Unchecked) :> Post '[JSON] GameSlot
   :<|>         "game" :> Capture "gameID" GameID                           :> Get  '[JSON] GameSlot
+  :<|>         "game" :> Capture "gameID" GameID :> "round" :> Capture "roundID" RoundID :> Get  '[JSON] (Round UserID)
+  :<|> Auth :> "games" :> ReqBody '[JSON] (GameCreationRequest 'Unchecked) :> Post '[JSON] GameSlot
   :<|> Auth :> "game" :> Capture "gameID" GameID                           :> Post '[JSON] GameSlot
 
-  :<|>         "game" :> Capture "gameID" GameID :> "round" :> Capture "roundID" RoundID :> Get  '[JSON] (Round UserID)
 --  :<|> Auth :> "game" :> Capture "gameID" GameID :> "round" :> Capture "roundID" RoundID :> Post '[JSON]       (Result UserID)
 
 
@@ -79,7 +79,7 @@ makeDeck = evalRandIO newDeck
 
 
 server :: Hazard -> DeckGenerator -> Server GameAPI
-server hazard deckGen = getAllGames hazard :<|> createOneGame hazard :<|> getGame hazard :<|> joinGame hazard deckGen :<|> getOneRound hazard
+server hazard deckGen = getAllGames hazard :<|> getGame hazard :<|> getOneRound hazard :<|> createOneGame hazard :<|> joinGame hazard deckGen
 
 
 getAllGames :: Hazard -> GameHandler [GameSlot]
