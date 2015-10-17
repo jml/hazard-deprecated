@@ -58,8 +58,10 @@ type GameAPI =
                "games"                                                     :> Get  '[JSON] [GameSlot]
   :<|>         "game" :> Capture "gameID" GameID                           :> Get  '[JSON] GameSlot
   :<|>         "game" :> Capture "gameID" GameID :> "round" :> Capture "roundID" RoundID :> Get  '[JSON] (Round UserID)
-  :<|> Auth :> "games" :> ReqBody '[JSON] (GameCreationRequest 'Unchecked) :> Post '[JSON] GameSlot
-  :<|> Auth :> "game" :> Capture "gameID" GameID                           :> Post '[JSON] GameSlot
+  :<|> Auth :> (
+         "games" :> ReqBody '[JSON] (GameCreationRequest 'Unchecked)  :> Post '[JSON] GameSlot
+    :<|> "game"  :> Capture "gameID" GameID                           :> Post '[JSON] GameSlot
+  )
 
 --  :<|> Auth :> "game" :> Capture "gameID" GameID :> "round" :> Capture "roundID" RoundID :> Post '[JSON]       (Result UserID)
 
@@ -79,19 +81,18 @@ makeDeck = evalRandIO newDeck
 
 
 server :: Hazard -> DeckGenerator -> Server GameAPI
-server hazard deckGen = getAllGames hazard :<|> getGame hazard :<|> getOneRound hazard :<|> createOneGame hazard :<|> joinGame hazard deckGen
+server hazard deckGen =
+  getAllGames hazard :<|> getGame hazard :<|> getOneRound hazard :<|> privateAPI
+  where
+    privateAPI = auth hazard (\user -> createOneGame user hazard :<|> joinGame user hazard deckGen)
 
 
 getAllGames :: Hazard -> GameHandler [GameSlot]
 getAllGames = map toList . liftIO . atomically . getGames
 
 
-createOneGame :: Hazard -> AuthProtected (User -> GameCreationRequest 'Unchecked -> GameHandler GameSlot)
-createOneGame hazard = auth hazard (createGame' hazard)
-
-
-createGame' :: Hazard -> User -> GameCreationRequest 'Unchecked -> GameHandler GameSlot
-createGame' hazard user request = do
+createOneGame :: User -> Hazard -> GameCreationRequest 'Unchecked -> GameHandler GameSlot
+createOneGame user hazard request = do
   req <- bimapEitherT toServantErr id (hoistEither (validateCreationRequest request))
   (_gameID, game) <- liftIO $ atomically $ createGame hazard (getUserID user) req
   return game
@@ -99,15 +100,15 @@ createGame' hazard user request = do
     toServantErr e = err400 { errBody = LazyBytes.fromStrict (encodeUtf8 (show e)) }
 
 
-joinGame :: Hazard -> IO FullDeck -> AuthProtected (User -> GameID -> GameHandler GameSlot)
-joinGame hazard deckGen = auth hazard (joinGame' hazard)
+joinGame :: User -> Hazard -> IO FullDeck -> GameID -> GameHandler GameSlot
+joinGame joiner hazard deckGen gameID = do
+  deck <- liftIO deckGen
+  result <- liftIO $ atomically $ applySlotAction hazard gameID (joinSlot deck (getUserID joiner))
+  snd <$> mapError toServantErr result
   where
-    joinGame' _hazard joiner gameID = do
-      deck <- liftIO deckGen
-      result <- liftIO $ atomically $ applySlotAction hazard gameID (joinSlot deck (getUserID joiner))
-      snd <$> mapError toServantErr result
     toServantErr e = err400 { errBody = LazyBytes.fromStrict (encodeUtf8 (show e)) }
     mapError f = bimapEitherT f id  . hoistEither
+
 
 getGame :: Hazard -> GameID -> GameHandler GameSlot
 getGame hazard gameId = do
